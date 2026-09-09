@@ -1,6 +1,6 @@
+import type { Metadata } from "next"
 import { StructuredData } from "@/components/structured-data"
 import type React from "react"
-import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import {
@@ -9,6 +9,7 @@ import {
   SITE_HOMEPAGE_CANONICAL,
   SITE_ORIGIN,
   ogImageAbsoluteUrl,
+  getAlternateLinks,
 } from "@/lib/site-url"
 import { LAYOUT_DESCRIPTION } from "@/lib/meta-description"
 import { SITE_SEO_KEYWORDS } from "@/lib/seo-keywords"
@@ -36,6 +37,16 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
+  robots: {
+    index: true,
+    follow: true,
+    nocache: false,
+    googleBot: {
+      index: true,
+      follow: true,
+      noimageindex: false,
+    },
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -61,6 +72,9 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: SITE_HOMEPAGE_CANONICAL,
+    languages: {
+      "en-US": SITE_HOMEPAGE_CANONICAL,
+    },
   },
   icons: {
     icon: [
@@ -74,8 +88,11 @@ export const metadata: Metadata = {
   },
   other: {
     "msapplication-TileImage": "/icon-48x48.png",
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
   },
   category: "Healthcare Benefits",
+  referrer: "strict-origin-when-cross-origin",
 }
 
 export default function RootLayout({
@@ -85,6 +102,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Canonical URL - points to primary domain */}
+        <link rel="canonical" href={SITE_HOMEPAGE_CANONICAL} />
+        
+        {/* Preconnect to external services */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        
+        {/* DNS prefetch for analytics */}
+        <link rel="dns-prefetch" href="https://api.vercel.com" />
+      </head>
       <body className="font-sans antialiased">
         <StructuredData />
         {children}
