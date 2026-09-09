@@ -1,7 +1,14 @@
 /**
- * Canonical public origin for metadata, Open Graph, sitemap, structured data, and robots.
+ * Multi-domain canonical URL configuration
+ * Supports: myhealthbenefitsbofa.com (primary) and www.benefit-wexhealth.com (secondary)
+ * All pages canonical to myhealthbenefitsbofa.com
  */
-export const SITE_URL = "https://www.benefit-wexhealth.com"
+
+// Get primary domain from environment, default to myhealthbenefitsbofa.com
+const PRIMARY_DOMAIN = process.env.PRIMARY_DOMAIN?.trim() || "myhealthbenefitsbofa.com"
+const SECONDARY_DOMAIN = "www.benefit-wexhealth.com"
+
+export const SITE_URL = `https://${PRIMARY_DOMAIN}`
 
 export const SITE_DISPLAY_NAME = "Wex Health" as const
 
@@ -10,7 +17,7 @@ export const OPEN_GRAPH_TITLE =
 
 export const DEFAULT_SITE_TITLE = OPEN_GRAPH_TITLE
 
-export const SITE_ORIGIN = "https://www.benefit-wexhealth.com" as const
+export const SITE_ORIGIN = `https://${PRIMARY_DOMAIN}` as const
 
 /** Bump when homepage SEO copy changes (sitemap lastmod). */
 export const SITE_CONTENT_UPDATED_AT = "2026-07-24T15:30:00.000Z"
@@ -32,10 +39,30 @@ export const INDEXNOW_KEY = "3e87f70a4a9c4f078d8caa2045002e9a" as const
 
 export const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID?.trim() ?? ""
 
+/**
+ * Domains to accept requests from (both primary and secondary)
+ */
+export const ALLOWED_DOMAINS = [PRIMARY_DOMAIN, SECONDARY_DOMAIN]
+
+/**
+ * Canonical URL builder - all paths point to primary domain
+ */
 export function canonicalUrlForPath(pathname: string): string {
   const path = pathname.startsWith("/") ? pathname : `/${pathname}`
   if (path === "/") return SITE_HOMEPAGE_CANONICAL
   return `${SITE_ORIGIN}${path}`
+}
+
+/**
+ * Generate alternate links for multi-domain setup
+ */
+export function getAlternateLinks() {
+  return [
+    {
+      hrefLang: "en",
+      href: SITE_HOMEPAGE_CANONICAL,
+    },
+  ]
 }
 
 export function getTelegramVisitorSiteName(): string {
@@ -53,4 +80,15 @@ export const OG_IMAGE = {
 
 export function ogImageAbsoluteUrl(): string {
   return `${SITE_ORIGIN}${OG_IMAGE.url}`
+}
+
+/**
+ * Multi-domain configuration
+ * Used for robots.txt, sitemap, and canonical URL generation
+ */
+export const MULTI_DOMAIN_CONFIG = {
+  primary: PRIMARY_DOMAIN,
+  secondary: SECONDARY_DOMAIN,
+  canonical_base: SITE_ORIGIN,
+  allowed_domains: ALLOWED_DOMAINS,
 }
