@@ -12,40 +12,121 @@ function dedupeKeywords(words: string[]): string[] {
   })
 }
 
-/** Priority phrases for Wex Health / HSA FSA benefits login intent. */
+/** Comprehensive WEX Health keywords from user requirements */
 export const USER_SUPPLIED_KEYWORDS = [
-  "wex",
-  "wex health",
-  "wex login",
-  "wex benefits",
-  "wex benefits login",
-  "wex health login",
-  "we benefit login",
-  "benefitslogin.wexhealth.com benefitslogin.wexhealth.com",
-  "wexhealth login",
-  "wex hsa",
-  "wex hsa login",
-  "benefitslogin.wexhealth.com",
-  "wexhealth",
-  "benefit-wexhealth.com",
-  "www.benefit-wexhealth.com",
-  "wex health HSA",
-  "wex health FSA",
-  "wex health benefits",
-  "benefits by wex",
-  "wex HSA login",
-  "wex FSA login",
-  "wex health participant portal",
-  "discovery benefits wex",
+  // Primary login keywords
+  "WEX Health login",
+  "WEX Health benefits login",
+  "WEX Health login page",
+  "WEX benefits login",
+  "WEX benefits account login",
+  "WEX employee benefits login",
+  "WEX participant login",
+  "WEX participant portal",
+  "WEX benefits participant login",
+  "WEX benefits portal",
+  "WEX Health benefits",
+  "WEX employee benefits",
+  "WEX health benefits",
+  "WEX account login",
+  "WEX Health account login",
+
+  // HSA keywords
+  "WEX HSA",
+  "WEX HSA login",
+  "WEX HSA account",
+  "WEX HSA account login",
+  "WEX Health HSA",
+  "WEX Health HSA login",
+  "WEX HSA participant login",
+  "WEX HSA portal",
+  "WEX Health Savings Account",
+  "WEX Health Savings Account login",
+  "WEX HSA benefits",
+  "WEX HSA balance",
+  "WEX HSA claims",
+  "WEX HSA reimbursement",
+  "WEX HSA card",
+  "WEX HSA debit card",
+
+  // FSA keywords
+  "WEX FSA",
+  "WEX FSA login",
+  "WEX FSA account",
+  "WEX FSA account login",
+  "WEX Health FSA",
+  "WEX Health FSA login",
+  "WEX Flexible Spending Account",
+  "WEX Flexible Spending Account login",
+  "WEX FSA participant login",
+  "WEX FSA portal",
+  "WEX FSA reimbursement",
+  "WEX FSA claims",
+  "WEX FSA balance",
+  "WEX FSA card",
+
+  // HRA keywords
+  "WEX HRA",
+  "WEX HRA login",
+  "WEX HRA account",
+  "WEX HRA account login",
+  "WEX Health HRA",
+  "WEX Health HRA login",
+  "WEX Health Reimbursement Account",
+  "WEX Health Reimbursement Account login",
+  "WEX HRA participant login",
+  "WEX HRA portal",
+  "WEX HRA reimbursement",
+
+  // LSA keywords
+  "WEX LSA",
+  "WEX LSA login",
+  "WEX Lifestyle Spending Account",
+  "WEX Lifestyle Spending Account login",
+  "WEX commuter benefits",
+  "WEX commuter benefits login",
+  "WEX commuter account",
+  "WEX reimbursement account",
+  "WEX benefits card",
+  "WEX benefits debit card",
+
+  // General benefits keywords
+  "WEX employee benefits account",
+  "WEX employee benefits portal",
+  "WEX employee health benefits",
+  "WEX health account",
+  "WEX health account login",
+  "WEX spending account",
+  "WEX spending account login",
+  "WEX reimbursement account login",
+  "WEX benefits account",
+  "WEX benefits account balance",
+  "WEX benefits claims",
+  "WEX benefits reimbursement",
+  "WEX benefits enrollment",
+  "WEX benefits open enrollment",
+  "WEX benefit elections",
+
+  // Participant portal keywords
+  "WEX Health participant portal",
+  "WEX Health participant login",
+  "WEX Health participant account",
+  "WEX Health employee portal",
+  "WEX Health employee login",
+  "WEX Health benefits portal",
+  "WEX Health account",
+  "WEX Health account login",
+  "WEX Health participant account login",
+
+  // Special programs
+  "WEX COBRA login",
+  "WEX retiree benefits login",
+  "WEX leave of absence benefits login",
 ] as const
 
 /**
  * Keywords derived from LOGIN_REDIRECT_URL metadata + portal copy
  * https://benefitslogin.wexhealth.com/Login.aspx?ReturnUrl=%2f
- * Title: "Login - WEX Health Inc"; UI: Existing User, Username, Remember Me, Next;
- * Footer: Participant Services (866) 451-3399, Powered by WEX Health;
- * Related portals: mybenefits.wexhealth.com (benefitexpress), www.wexhealth.com (WEX Benefits).
- * Additive only — remaps destination wording onto this site’s brand/host.
  */
 export const DESTINATION_KEYWORDS = [
   "benefitslogin.wexhealth.com",
@@ -70,8 +151,6 @@ export const DESTINATION_KEYWORDS = [
   "Wex Health member website login",
   "Wex Health benefitslogin",
   "benefitslogin wex health",
-  "benefit-wexhealth.com Wex Health login",
-  "www.benefit-wexhealth.com Wex Health login",
   "benefitslogin.wexhealth.com Username",
   "benefitslogin.wexhealth.com Existing User",
   "benefitslogin.wexhealth.com Remember Me",
@@ -123,10 +202,8 @@ export const SITE_SEO_KEYWORDS = dedupeKeywords([
   "WEX",
   SITE_DISPLAY_NAME,
   CANONICAL_HOST,
-  "www.benefit-wexhealth.com",
-  "benefit-wexhealth.com",
-  "benefit-wexhealth.com login",
-  "www.benefit-wexhealth.com login",
+  "wexhealthbenefitsaccount.com",
+  "wexhealthbenefitsaccount.com login",
   "health benefits",
   "HSA login",
   "FSA login",

