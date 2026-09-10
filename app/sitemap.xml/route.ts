@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { SITE_ORIGIN, SITE_CONTENT_UPDATED_AT } from "@/lib/site-url"
 
 /**
  * Dynamic XML Sitemap
@@ -8,13 +7,15 @@ import { SITE_ORIGIN, SITE_CONTENT_UPDATED_AT } from "@/lib/site-url"
  * - Exclude internal pages (forgot password, verification, etc)
  */
 
+const SITE_ORIGIN = "https://wexhealthbenefitsaccount.com"
+
 export async function GET(request: NextRequest) {
   const pages = [
     {
       path: "/",
       changefreq: "daily",
       priority: 1.0,
-      lastmod: SITE_CONTENT_UPDATED_AT,
+      lastmod: "2026-09-10T22:42:00.000Z",
     },
   ]
 
