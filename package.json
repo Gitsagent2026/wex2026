@@ -6,7 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "test:approval": "node --test ./lib/approval-webhook.test.mjs",
+    "test:approval": "node --experimental-strip-types --test ./lib/approval-webhook.test.mjs",
     "start": "next start"
   },
   "dependencies": {

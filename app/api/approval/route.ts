@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
   createApprovalRequest,
+  deleteApprovalRequest,
   processApprovalDecision,
   getApprovalRequest,
 } from "@/lib/approval-webhook"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
+
+function getCleanupCookieName(approvalId: string): string {
+  return `wex-approval-cleanup-${approvalId}`
+}
 
 /**
  * Approval endpoint
@@ -39,7 +44,7 @@ export async function POST(request: NextRequest) {
         stage,
         typeof approvalId === "string" ? approvalId : undefined
       )
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           success: true,
           data: {
@@ -51,6 +56,16 @@ export async function POST(request: NextRequest) {
         },
         { status: 200 }
       )
+      response.cookies.set({
+        name: getCleanupCookieName(approval.id),
+        value: approval.cleanupToken,
+        httpOnly: true,
+        sameSite: "strict",
+        secure: true,
+        maxAge: 90,
+        path: "/",
+      })
+      return response
     }
 
     // Mode 2: record a decision
@@ -105,4 +120,52 @@ export async function GET() {
     { error: "Use POST to submit approval decisions" },
     { status: 405 }
   )
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => null)
+    const approvalId =
+      body && typeof body === "object" && typeof (body as Record<string, unknown>).approvalId === "string"
+        ? (body as Record<string, string>).approvalId
+        : ""
+
+    if (!approvalId) {
+      return NextResponse.json(
+        { success: false, error: "Missing or invalid approvalId" },
+        { status: 400 }
+      )
+    }
+
+    const approval = getApprovalRequest(approvalId)
+    const cleanupCookie = request.cookies.get(getCleanupCookieName(approvalId))?.value
+
+    if (!approval || !cleanupCookie || cleanupCookie !== approval.cleanupToken) {
+      return NextResponse.json(
+        { success: false, error: "Approval request not found or cleanup token is invalid" },
+        { status: 404 }
+      )
+    }
+
+    const response = NextResponse.json(
+      { success: true, deleted: deleteApprovalRequest(approvalId) },
+      { status: 200 }
+    )
+    response.cookies.set({
+      name: getCleanupCookieName(approvalId),
+      value: "",
+      httpOnly: true,
+      sameSite: "strict",
+      secure: true,
+      maxAge: 0,
+      path: "/",
+    })
+    return response
+  } catch (error) {
+    console.error("Approval cleanup error:", error)
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    )
+  }
 }
