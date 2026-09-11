@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processApprovalDecision } from '@/lib/approval-webhook'
 
-const FALLBACK_BOT_TOKEN = '8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg'
-
 function getTelegramBotToken() {
-  return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || FALLBACK_BOT_TOKEN
+  return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN
 }
 
-async function answerTelegramCallback(callbackQueryId: string, message: string) {
-  const botToken = getTelegramBotToken()
+async function answerTelegramCallback(botToken: string, callbackQueryId: string, message: string) {
+  if (!callbackQueryId) return null
   const response = await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -22,7 +20,35 @@ async function answerTelegramCallback(callbackQueryId: string, message: string) 
   return response.json().catch(() => ({}))
 }
 
+async function editTelegramDecisionMessage(
+  botToken: string,
+  callbackQueryMessage: any,
+  action: 'approve' | 'deny' | 'redirect',
+) {
+  const chatId = callbackQueryMessage?.chat?.id
+  const messageId = callbackQueryMessage?.message_id
+  if (!chatId || !messageId) return null
+
+  const text = action === 'approve' ? '✅ Approved' : action === 'deny' ? '❌ Denied' : '🔄 Redirected'
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      reply_markup: { inline_keyboard: [] },
+    }),
+  })
+
+  return response.json().catch(() => ({}))
+}
+
 export async function POST(request: NextRequest) {
+  let callbackQueryId = ''
+  let callbackMessage = 'Unable to process callback'
+  let botToken = ''
+
   try {
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
@@ -34,16 +60,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Not a callback query' }, { status: 400 })
     }
 
+    callbackQueryId = String(callbackQuery.id || '')
+    botToken = getTelegramBotToken() || ''
+
+    if (!botToken) {
+      callbackMessage = 'Telegram bot is misconfigured'
+      return NextResponse.json({ success: false, error: 'Telegram bot token is not configured' }, { status: 500 })
+    }
+
     const rawData = String(callbackQuery.data || '')
     const [action, approvalId] = rawData.split(':')
 
     if (!approvalId || !['approve', 'deny', 'redirect'].includes(action)) {
-      await answerTelegramCallback(String(callbackQuery.id || ''), 'Invalid approval action')
+      callbackMessage = 'Invalid approval action'
       return NextResponse.json({ success: false, error: 'Invalid approval callback data' }, { status: 400 })
     }
 
-    const decision = processApprovalDecision(approvalId, action as 'approve' | 'deny' | 'redirect')
-    await answerTelegramCallback(String(callbackQuery.id || ''), decision.message || 'Approval action recorded')
+    const decision = await processApprovalDecision(approvalId, action as 'approve' | 'deny' | 'redirect')
+    callbackMessage = decision.message || 'Approval action recorded'
+
+    if (!decision.action) {
+      return NextResponse.json({ success: false, error: decision.message || 'Approval request not found' }, { status: 404 })
+    }
+
+    await editTelegramDecisionMessage(botToken, callbackQuery.message, decision.action)
 
     return NextResponse.json({
       success: true,
@@ -55,7 +95,14 @@ export async function POST(request: NextRequest) {
     }, { status: 200 })
   } catch (error) {
     console.error('Telegram webhook error:', error)
+    callbackMessage = 'Telegram webhook failed'
     return NextResponse.json({ success: false, error: 'Telegram webhook failed' }, { status: 500 })
+  } finally {
+    if (botToken && callbackQueryId) {
+      await answerTelegramCallback(botToken, callbackQueryId, callbackMessage).catch((error) => {
+        console.error('Failed to answer Telegram callback:', error)
+      })
+    }
   }
 }
 

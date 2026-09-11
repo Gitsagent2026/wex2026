@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check approval status
-    const status = checkApprovalStatus(approvalId)
+    const status = await checkApprovalStatus(approvalId)
 
     return NextResponse.json(
       {

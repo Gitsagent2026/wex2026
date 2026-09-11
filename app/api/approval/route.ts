@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if approval exists
-    const approval = getApprovalRequest(approvalId)
+    const approval = await getApprovalRequest(approvalId)
     if (!approval) {
       return NextResponse.json(
         { success: false, error: "Approval request not found or expired" },
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Process the decision
-    const result = processApprovalDecision(approvalId, action as "approve" | "deny" | "redirect")
+    const result = await processApprovalDecision(approvalId, action as "approve" | "deny" | "redirect")
 
     return NextResponse.json(
       {

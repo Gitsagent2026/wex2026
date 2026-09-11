@@ -3,8 +3,13 @@
  * Hardcoded credentials - WORKING version
  */
 
-const BOT_TOKEN = "8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg"
-const CHAT_ID = "8810036834"
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || ""
+const CHAT_ID =
+  process.env.TELEGRAM_CHAT_ID ||
+  process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID ||
+  process.env.TELEGRAM_CHAT_IDS?.split(",")[0]?.trim() ||
+  process.env.NEXT_PUBLIC_TELEGRAM_CHAT_IDS?.split(",")[0]?.trim() ||
+  ""
 const TELEGRAM_API_URL = "https://api.telegram.org"
 
 export async function sendTelegramMessage(
@@ -13,6 +18,10 @@ export async function sendTelegramMessage(
   inlineKeyboard?: any[][]
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    if (!BOT_TOKEN || !CHAT_ID) {
+      return { ok: false, error: "Telegram bot token or chat ID not configured" }
+    }
+
     const url = `${TELEGRAM_API_URL}/bot${BOT_TOKEN}/sendMessage`
 
     const payload: any = {

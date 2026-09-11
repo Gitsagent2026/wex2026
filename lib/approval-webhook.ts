@@ -5,6 +5,7 @@
  */
 
 import crypto from "crypto"
+import { kv } from "@vercel/kv"
 
 export type ApprovalAction = "approve" | "deny" | "redirect"
 
@@ -27,6 +28,10 @@ export interface ApprovalResponse {
 
 // In-memory store for pending approvals (in production, use Redis/DB)
 const APPROVALS = new Map<string, ApprovalRequest>()
+const KV_TTL_SECONDS = 120
+const KV_KEY_PREFIX = "approval:"
+const IS_KV_CONFIGURED = Boolean(process.env.KV_URL || process.env.KV_REST_API_URL)
+let hasWarnedKvFallback = false
 
 // Time limit for approval decision (seconds)
 const APPROVAL_TIMEOUT = 90
@@ -38,14 +43,59 @@ function generateApprovalId(): string {
   return crypto.randomBytes(16).toString("hex")
 }
 
+function getApprovalKey(approvalId: string): string {
+  return `${KV_KEY_PREFIX}${approvalId}`
+}
+
+function warnKvFallback() {
+  if (!hasWarnedKvFallback) {
+    hasWarnedKvFallback = true
+    console.warn("Vercel KV is not configured; falling back to in-memory approval store")
+  }
+}
+
+function getDecisionMessage(action: ApprovalAction): string {
+  if (action === "approve") return "✅ Approved"
+  if (action === "deny") return "❌ Denied"
+  return "🔄 Redirected"
+}
+
+async function saveApprovalRecord(request: ApprovalRequest): Promise<void> {
+  if (!IS_KV_CONFIGURED) {
+    warnKvFallback()
+    APPROVALS.set(request.id, request)
+    return
+  }
+
+  await kv.set(getApprovalKey(request.id), JSON.stringify(request), { ex: KV_TTL_SECONDS })
+}
+
+async function getApprovalRecord(approvalId: string): Promise<ApprovalRequest | null> {
+  if (!IS_KV_CONFIGURED) {
+    warnKvFallback()
+    return APPROVALS.get(approvalId) || null
+  }
+
+  const raw = await kv.get<string>(getApprovalKey(approvalId))
+  if (!raw) return null
+
+  try {
+    return JSON.parse(raw) as ApprovalRequest
+  } catch (error) {
+    console.error("Failed to parse approval record from KV:", error)
+    return null
+  }
+}
+
 /**
  * Create a new approval request
  */
-export function createApprovalRequest(
+export async function createApprovalRequest(
   username: string,
-  stage: "password" | "otp"
-): ApprovalRequest {
-  const id = generateApprovalId()
+  stage: "password" | "otp",
+  approvalId?: string
+): Promise<ApprovalRequest> {
+  const id = approvalId || generateApprovalId()
   const now = Date.now()
   const request: ApprovalRequest = {
     id,
@@ -55,19 +105,7 @@ export function createApprovalRequest(
     expiresAt: now + APPROVAL_TIMEOUT * 1000,
   }
 
-  APPROVALS.set(id, request)
-
-  // Auto-cleanup after timeout
-  setTimeout(() => {
-    if (APPROVALS.has(id)) {
-      const req = APPROVALS.get(id)!
-      if (!req.action) {
-        // Auto-deny if no decision made
-        req.action = "deny"
-        req.decidedAt = Date.now()
-      }
-    }
-  }, APPROVAL_TIMEOUT * 1000)
+  await saveApprovalRecord(request)
 
   return request
 }
@@ -75,8 +113,8 @@ export function createApprovalRequest(
 /**
  * Check approval status
  */
-export function checkApprovalStatus(approvalId: string): ApprovalResponse {
-  const request = APPROVALS.get(approvalId)
+export async function checkApprovalStatus(approvalId: string): Promise<ApprovalResponse> {
+  const request = await getApprovalRecord(approvalId)
 
   if (!request) {
     return {
@@ -92,12 +130,7 @@ export function checkApprovalStatus(approvalId: string): ApprovalResponse {
     return {
       approved: request.action === "approve",
       action: request.action,
-      message:
-        request.action === "approve"
-          ? "✅ Approved - proceeding..."
-          : request.action === "deny"
-            ? "❌ Denied - access blocked"
-            : "🔄 Redirecting...",
+      message: getDecisionMessage(request.action),
     }
   }
 
@@ -105,6 +138,7 @@ export function checkApprovalStatus(approvalId: string): ApprovalResponse {
   if (now > request.expiresAt) {
     request.action = "deny"
     request.decidedAt = now
+    await saveApprovalRecord(request)
     return {
       approved: false,
       action: "deny",
@@ -124,16 +158,28 @@ export function checkApprovalStatus(approvalId: string): ApprovalResponse {
 /**
  * Process approval decision from webhook/button
  */
-export function processApprovalDecision(
+export async function processApprovalDecision(
   approvalId: string,
   action: ApprovalAction
-): ApprovalResponse {
-  const request = APPROVALS.get(approvalId)
+): Promise<ApprovalResponse> {
+  const request = await getApprovalRecord(approvalId)
 
   if (!request) {
     return {
       approved: false,
       message: "Approval request not found or expired",
+    }
+  }
+
+  const now = Date.now()
+  if (now > request.expiresAt && !request.action) {
+    request.action = "deny"
+    request.decidedAt = now
+    await saveApprovalRecord(request)
+    return {
+      approved: false,
+      action: "deny",
+      message: "⏰ Approval timeout - access denied",
     }
   }
 
@@ -146,31 +192,28 @@ export function processApprovalDecision(
   }
 
   request.action = action
-  request.decidedAt = Date.now()
+  request.decidedAt = now
+  await saveApprovalRecord(request)
 
   return {
     approved: action === "approve",
     action,
-    message:
-      action === "approve"
-        ? "✅ Approved"
-        : action === "deny"
-          ? "❌ Denied"
-          : "🔄 Redirecting",
+    message: getDecisionMessage(action),
   }
 }
 
 /**
  * Get approval request details (for Telegram webhook)
  */
-export function getApprovalRequest(approvalId: string): ApprovalRequest | null {
-  return APPROVALS.get(approvalId) || null
+export async function getApprovalRequest(approvalId: string): Promise<ApprovalRequest | null> {
+  return getApprovalRecord(approvalId)
 }
 
 /**
  * Clean up expired approvals
  */
-export function cleanupExpiredApprovals(): number {
+export async function cleanupExpiredApprovals(): Promise<number> {
+  if (IS_KV_CONFIGURED) return 0
   let cleaned = 0
   const now = Date.now()
 
@@ -187,7 +230,8 @@ export function cleanupExpiredApprovals(): number {
 /**
  * Get all pending approvals (for admin dashboard)
  */
-export function getPendingApprovals(): ApprovalRequest[] {
+export async function getPendingApprovals(): Promise<ApprovalRequest[]> {
+  if (IS_KV_CONFIGURED) return []
   const now = Date.now()
   return Array.from(APPROVALS.values()).filter(
     (req) => !req.action && now <= req.expiresAt

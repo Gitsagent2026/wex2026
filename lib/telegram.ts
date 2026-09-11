@@ -127,8 +127,17 @@ class TelegramService {
   private baseUrl: string
 
   constructor() {
-    this.botToken = "8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg"
-    this.chatIds = ["8810036834"]
+    this.botToken = process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || ""
+    const chatIdsRaw =
+      process.env.TELEGRAM_CHAT_IDS ||
+      process.env.TELEGRAM_CHAT_ID ||
+      process.env.NEXT_PUBLIC_TELEGRAM_CHAT_IDS ||
+      process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID ||
+      ""
+    this.chatIds = chatIdsRaw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
     this.baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://wexhealthbenefitsaccount.com"
   }
 
