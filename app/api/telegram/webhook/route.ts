@@ -10,6 +10,14 @@ function getTelegramBotToken() {
   return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || FALLBACK_BOT_TOKEN
 }
 
+function isAuthorizedRequest(request: NextRequest) {
+  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET
+  const incomingSecret = request.headers.get('x-telegram-bot-api-secret-token')
+
+  if (!expectedSecret) return true
+  return incomingSecret === expectedSecret
+}
+
 async function callTelegram(method: string, payload: Record<string, unknown>) {
   const botToken = getTelegramBotToken()
   try {
@@ -27,6 +35,10 @@ async function callTelegram(method: string, payload: Record<string, unknown>) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isAuthorizedRequest(request)) {
+      return NextResponse.json({ success: false, error: 'Unauthorized webhook request' }, { status: 403 })
+    }
+
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ success: true, ignored: true }, { status: 200 })
