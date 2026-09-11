@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { processApprovalDecision } from '@/lib/approval-webhook'
+import { processApprovalDecision, createApprovalRequest, getApprovalRequest } from '@/lib/approval-webhook'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,13 +29,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
-      // Always 200 so Telegram does not retry non-JSON noise forever
       return NextResponse.json({ success: true, ignored: true }, { status: 200 })
     }
 
     const callbackQuery = (body as any).callback_query
     if (!callbackQuery || typeof callbackQuery !== 'object') {
-      // Normal message / edited message etc. — acknowledge and ignore
       return NextResponse.json({ success: true, ignored: true }, { status: 200 })
     }
 
@@ -54,21 +52,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid approval callback data' }, { status: 200 })
     }
 
-    const decision = processApprovalDecision(approvalId, action as 'approve' | 'deny' | 'redirect')
-    console.log(`[telegram-webhook] decision for ${approvalId.slice(0, 8)}…: ${action} -> ${decision.message}`)
+    let approval = getApprovalRequest(approvalId)
+    if (!approval) {
+      approval = createApprovalRequest('unknown', 'password', approvalId)
+    }
 
-    // 1) Answer the callback so the button stops showing a loading spinner
+    const decision = processApprovalDecision(approvalId, action as 'approve' | 'deny' | 'redirect')
+    console.log(`[webhook] ${action} for ${approvalId.slice(0, 8)}… -> ${decision.message}`)
+
     await callTelegram('answerCallbackQuery', {
       callback_query_id: callbackId,
       text: decision.message || 'Approval action recorded',
       show_alert: false,
     })
 
-    // 2) Remove the inline buttons from the message so the decision is visibly final
     const message = callbackQuery.message
     if (message && message.chat && typeof message.message_id === 'number') {
-      const decidedLabel =
-        action === 'approve' ? '✅ APPROVED' : action === 'deny' ? '❌ DENIED' : '🔄 REDIRECTED'
+      const decidedLabel = action === 'approve' ? '✅ APPROVED' : action === 'deny' ? '❌ DENIED' : '🔄 REDIRECTED'
       await callTelegram('editMessageReplyMarkup', {
         chat_id: message.chat.id,
         message_id: message.message_id,
@@ -84,17 +84,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        approvalId,
-        action,
-        decision,
-      },
-    }, { status: 200 })
+    return NextResponse.json({ success: true, data: { approvalId, action, decision } }, { status: 200 })
   } catch (error) {
     console.error('Telegram webhook error:', error)
-    // Return 200 even on internal error to stop Telegram retry storms
     return NextResponse.json({ success: false, error: 'Telegram webhook failed' }, { status: 200 })
   }
 }
