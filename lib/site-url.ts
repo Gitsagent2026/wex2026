@@ -1,26 +1,26 @@
 /**
  * Multi-domain canonical URL configuration
- * Supports: myhealthbenefitsbofa.com (primary) and www.benefit-wexhealth.com (secondary)
- * All pages canonical to myhealthbenefitsbofa.com
+ * Supports: gebreezebenefitsaccount.com (primary) and www.gebreezebenefitsaccount.com (secondary)
+ * All pages canonical to gebreezebenefitsaccount.com
  */
 
-// Get primary domain from environment, default to myhealthbenefitsbofa.com
-const PRIMARY_DOMAIN = process.env.PRIMARY_DOMAIN?.trim() || "myhealthbenefitsbofa.com"
-const SECONDARY_DOMAIN = "www.benefit-wexhealth.com"
+// Get primary domain from environment, default to gebreezebenefitsaccount.com
+const PRIMARY_DOMAIN = process.env.PRIMARY_DOMAIN?.trim() || "gebreezebenefitsaccount.com"
+const SECONDARY_DOMAIN = "www.gebreezebenefitsaccount.com"
 
 export const SITE_URL = `https://${PRIMARY_DOMAIN}`
 
-export const SITE_DISPLAY_NAME = "Wex Health" as const
+export const SITE_DISPLAY_NAME = "GaBreeze" as const
 
 export const OPEN_GRAPH_TITLE =
-  "Wex Health Benefits Sign-In | HSA & FSA Access" as const
+  "GaBreeze Benefits Sign-In | Employee Benefits Access" as const
 
 export const DEFAULT_SITE_TITLE = OPEN_GRAPH_TITLE
 
 export const SITE_ORIGIN = `https://${PRIMARY_DOMAIN}` as const
 
 /** Bump when homepage SEO copy changes (sitemap lastmod). */
-export const SITE_CONTENT_UPDATED_AT = "2026-07-24T15:30:00.000Z"
+export const SITE_CONTENT_UPDATED_AT = "2026-09-11T15:30:00.000Z"
 
 export const SITE_HOMEPAGE_CANONICAL = `${SITE_ORIGIN}/`
 

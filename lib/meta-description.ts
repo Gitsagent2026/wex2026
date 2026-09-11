@@ -5,7 +5,7 @@
  */
 
 export const LAYOUT_DESCRIPTION =
-  "Wex Health Benefits Sign-In | HSA & FSA Access. Securely open your Wex Health HSA, FSA, and workplace benefits with two-step verification."
+  "GaBreeze Benefits Sign-In | Employee Benefits Access. Securely sign in to manage your GaBreeze employee benefits, enrollment, and account details."
 
 export const HOME_DESCRIPTION =
-  "Wex Health Benefits Sign-In | HSA & FSA Access. Sign in to manage HSA, FSA, and Wex Health employee benefit accounts."
+  "GaBreeze Benefits Sign-In | Employee Benefits Access. Sign in to manage your GaBreeze benefits, enrollment, and employee account information."
