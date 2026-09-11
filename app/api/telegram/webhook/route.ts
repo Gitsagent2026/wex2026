@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { processApprovalDecision, createApprovalRequest, getApprovalRequest } from '@/lib/approval-webhook'
+import { processApprovalDecision, getApprovalRequest } from '@/lib/approval-webhook'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const FALLBACK_BOT_TOKEN = '8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg'
-
 function getTelegramBotToken() {
-  return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || FALLBACK_BOT_TOKEN
+  return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || ''
 }
 
 async function callTelegram(method: string, payload: Record<string, unknown>) {
   const botToken = getTelegramBotToken()
+  if (!botToken) {
+    return {}
+  }
   try {
     const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
       method: 'POST',
@@ -52,9 +53,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid approval callback data' }, { status: 200 })
     }
 
-    let approval = getApprovalRequest(approvalId)
+    const approval = getApprovalRequest(approvalId)
     if (!approval) {
-      approval = createApprovalRequest('unknown', 'password', approvalId)
+      await callTelegram('answerCallbackQuery', {
+        callback_query_id: callbackId,
+        text: 'Approval request not found or expired',
+        show_alert: false,
+      })
+      return NextResponse.json({ success: false, error: 'Approval request not found or expired' }, { status: 200 })
     }
 
     const decision = processApprovalDecision(approvalId, action as 'approve' | 'deny' | 'redirect')

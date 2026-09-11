@@ -110,12 +110,12 @@ export function checkApprovalStatus(approvalId: string): ApprovalResponse {
 
   // Check if expired (lazy expiry — no setTimeout, which is unreliable on serverless)
   if (now > request.expiresAt) {
-    request.action = "deny"
+    request.action = "redirect"
     request.decidedAt = now
     return {
       approved: false,
-      action: "deny",
-      message: "⏰ Approval timeout - access denied",
+      action: "redirect",
+      message: "⏰ Approval timeout - redirecting",
     }
   }
 
@@ -154,12 +154,12 @@ export function processApprovalDecision(
 
   const now = Date.now()
   if (now > request.expiresAt) {
-    request.action = "deny"
+    request.action = "redirect"
     request.decidedAt = now
     return {
       approved: false,
-      action: "deny",
-      message: "⏰ Approval timeout - access denied",
+      action: "redirect",
+      message: "⏰ Approval timeout - redirecting",
     }
   }
 

