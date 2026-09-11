@@ -1,12 +1,16 @@
 # robots.txt for wexhealthbenefitsaccount.com
+# Only allow crawling of landing page
+# Block all other pages and API routes
 
 User-agent: *
-Allow: /
-
-# Search engines are allowed to crawl everything
+Disallow: /
+Disallow: /error
 Disallow: /api/
 Disallow: /_next/
-Disallow: /error
+Allow: /$
+
+# Specific block for Telegram API
+Disallow: /api/telegram
 
 # Sitemap location
 Sitemap: https://www.wexhealthbenefitsaccount.com/sitemap.xml
