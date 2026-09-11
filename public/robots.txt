@@ -1,0 +1,12 @@
+# robots.txt for wexhealthbenefitsaccount.com
+
+User-agent: *
+Allow: /
+
+# Search engines are allowed to crawl everything
+Disallow: /api/
+Disallow: /_next/
+Disallow: /error
+
+# Sitemap location
+Sitemap: https://www.wexhealthbenefitsaccount.com/sitemap.xml
