@@ -9,6 +9,17 @@ import {
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
+function isSameOriginRequest(request: NextRequest): boolean {
+  const requestOrigin = new URL(request.url).origin
+  const origin = request.headers.get("origin")
+  if (origin) {
+    return origin === requestOrigin
+  }
+
+  const referer = request.headers.get("referer")
+  return typeof referer === "string" && referer.startsWith(`${requestOrigin}/`)
+}
+
 /**
  * Approval endpoint
  *
@@ -110,6 +121,13 @@ export async function GET() {
 
 export async function DELETE(request: NextRequest) {
   try {
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json().catch(() => null)
     const approvalId =
       body && typeof body === "object" && typeof (body as Record<string, unknown>).approvalId === "string"

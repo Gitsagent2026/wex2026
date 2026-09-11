@@ -132,7 +132,7 @@ export default function LoginPage() {
     return `0:${padded}`
   }
 
-  const handleApprovalComplete = (action: string) => {
+  const handleApprovalComplete = (action: "approve" | "deny" | "redirect") => {
     setAwaitingApproval(false)
     setApprovalId("")
     setApprovalCountdown(approvalTimeoutSeconds)
