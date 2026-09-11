@@ -170,6 +170,7 @@ export default function LoginPage() {
       setApprovalCountdown(approvalTimeoutSeconds)
 
       const newApprovalId = generateApprovalId()
+      setApprovalId(newApprovalId)
       const registerResponse = await fetch("/api/approval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -201,11 +202,10 @@ export default function LoginPage() {
       if (!telegramResponse.ok) {
         throw new Error("Failed to send approval prompt")
       }
-
-      setApprovalId(newApprovalId)
     } catch (error) {
       console.error("Approval initiation error:", error)
       setAwaitingApproval(false)
+      setApprovalId("")
       if (stage === "password") {
         setLoginError(MSG_UNABLE_REACH_VERIFICATION)
       } else {
