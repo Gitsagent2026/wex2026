@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendTelegramNotification } from '@/lib/telegram'
 import { validateTelegramBody, formatZodError } from '@/lib/validators'
+import { deleteApprovalRequest } from '@/lib/approval-webhook'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,6 +32,15 @@ export async function POST(request: NextRequest) {
     if (result.success) {
       return NextResponse.json({ success: true, result }, { status: 200 })
     }
+
+    if (
+      (payload.type === 'password_approval' || payload.type === 'otp_approval') &&
+      typeof payload.data.approvalId === 'string' &&
+      payload.data.approvalId
+    ) {
+      deleteApprovalRequest(payload.data.approvalId)
+    }
+
     const errorMessage =
       'error' in result && typeof result.error === 'string'
         ? result.error

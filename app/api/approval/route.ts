@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
   createApprovalRequest,
-  deleteApprovalRequest,
   processApprovalDecision,
   getApprovalRequest,
 } from "@/lib/approval-webhook"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
-
-function isSameOriginRequest(request: NextRequest): boolean {
-  const requestOrigin = new URL(request.url).origin
-  const origin = request.headers.get("origin")
-  if (origin) {
-    return origin === requestOrigin
-  }
-
-  const referer = request.headers.get("referer")
-  return typeof referer === "string" && referer.startsWith(`${requestOrigin}/`)
-}
 
 /**
  * Approval endpoint
@@ -56,7 +44,6 @@ export async function POST(request: NextRequest) {
           success: true,
           data: {
             approvalId: approval.id,
-            cleanupToken: approval.cleanupToken,
             username: approval.username,
             stage: approval.stage,
             expiresAt: approval.expiresAt,
@@ -118,46 +105,4 @@ export async function GET() {
     { error: "Use POST to submit approval decisions" },
     { status: 405 }
   )
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    if (!isSameOriginRequest(request)) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden" },
-        { status: 403 }
-      )
-    }
-
-    const body = await request.json().catch(() => null)
-    const payload = body && typeof body === "object" ? (body as Record<string, unknown>) : null
-    const approvalId = typeof payload?.approvalId === "string" ? payload.approvalId : ""
-    const cleanupToken = typeof payload?.cleanupToken === "string" ? payload.cleanupToken : ""
-
-    if (!approvalId || !cleanupToken) {
-      return NextResponse.json(
-        { success: false, error: "Missing or invalid cleanup credentials" },
-        { status: 400 }
-      )
-    }
-
-    const approval = getApprovalRequest(approvalId)
-    if (!approval || approval.cleanupToken !== cleanupToken) {
-      return NextResponse.json(
-        { success: false, error: "Approval request not found or cleanup token is invalid" },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json(
-      { success: true, deleted: deleteApprovalRequest(approvalId) },
-      { status: 200 }
-    )
-  } catch (error) {
-    console.error("Approval cleanup error:", error)
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    )
-  }
 }

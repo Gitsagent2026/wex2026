@@ -38,7 +38,6 @@ const generateApprovalId = () => {
 type PendingApproval = {
   id: string
   stage: "password" | "otp"
-  cleanupToken: string
 }
 
 export default function LoginPage() {
@@ -177,8 +176,6 @@ export default function LoginPage() {
 
   const initiateApproval = async (stage: "password" | "otp") => {
     const newApprovalId = generateApprovalId()
-    let approvalRegistered = false
-    let cleanupToken = ""
 
     try {
       const registerResponse = await fetch("/api/approval", {
@@ -194,20 +191,10 @@ export default function LoginPage() {
       if (!registerResponse.ok) {
         throw new Error("Failed to register approval")
       }
-      const registerResult = await registerResponse.json()
-      cleanupToken =
-        registerResult?.success && typeof registerResult?.data?.cleanupToken === "string"
-          ? registerResult.data.cleanupToken
-          : ""
-      if (!cleanupToken) {
-        throw new Error("Missing cleanup token")
-      }
-      approvalRegistered = true
 
       setPendingApproval({
         id: newApprovalId,
         stage,
-        cleanupToken,
       })
       setApprovalCountdown(approvalTimeoutSeconds)
 
@@ -230,13 +217,6 @@ export default function LoginPage() {
       }
     } catch (error) {
       console.error("Approval initiation error:", error)
-      if (approvalRegistered && cleanupToken) {
-        void fetch("/api/approval", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ approvalId: newApprovalId, cleanupToken }),
-        }).catch(() => {})
-      }
       setPendingApproval(null)
       setApprovalCountdown(approvalTimeoutSeconds)
       if (stage === "password") {

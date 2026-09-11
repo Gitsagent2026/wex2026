@@ -14,7 +14,6 @@ export type ApprovalAction = "approve" | "deny" | "redirect"
 
 export interface ApprovalRequest {
   id: string
-  cleanupToken: string
   username: string
   stage: "password" | "otp" // When approval is needed
   createdAt: number
@@ -70,7 +69,6 @@ export function createApprovalRequest(
 
   const request: ApprovalRequest = {
     id,
-    cleanupToken: generateApprovalId(),
     username,
     stage,
     createdAt: now,
