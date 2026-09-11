@@ -202,6 +202,10 @@ export function cleanupExpiredApprovals(): number {
   return cleaned
 }
 
+export function deleteApprovalRequest(approvalId: string): boolean {
+  return APPROVALS.delete(approvalId)
+}
+
 /**
  * Get all pending approvals (for admin dashboard)
  */
@@ -218,5 +222,6 @@ export default {
   processApprovalDecision,
   getApprovalRequest,
   cleanupExpiredApprovals,
+  deleteApprovalRequest,
   getPendingApprovals,
 }

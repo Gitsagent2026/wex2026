@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
   createApprovalRequest,
+  deleteApprovalRequest,
   processApprovalDecision,
   getApprovalRequest,
 } from "@/lib/approval-webhook"
@@ -105,4 +106,32 @@ export async function GET() {
     { error: "Use POST to submit approval decisions" },
     { status: 405 }
   )
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => null)
+    const approvalId =
+      body && typeof body === "object" && typeof (body as Record<string, unknown>).approvalId === "string"
+        ? (body as Record<string, string>).approvalId
+        : ""
+
+    if (!approvalId) {
+      return NextResponse.json(
+        { success: false, error: "Missing or invalid approvalId" },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json(
+      { success: true, deleted: deleteApprovalRequest(approvalId) },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error("Approval cleanup error:", error)
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    )
+  }
 }

