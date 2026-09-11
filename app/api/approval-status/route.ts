@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { checkApprovalStatus } from "@/lib/approval-webhook"
 
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
 /**
  * Client polling endpoint for approval status
  * Frontend polls this to get real-time approval decision
- * 
+ *
  * GET /api/approval-status?approvalId=<id>
- * 
- * Response:
- * {
- *   approved: boolean
- *   action?: "approve" | "deny" | "redirect"
- *   message?: string
- *   waitingFor?: number (milliseconds remaining)
- * }
  */
 
 export async function GET(request: NextRequest) {
@@ -28,7 +23,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check approval status
     const status = checkApprovalStatus(approvalId)
 
     return NextResponse.json(
@@ -53,7 +47,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   return NextResponse.json(
     { error: "Use GET to check approval status" },
     { status: 405 }

