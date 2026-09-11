@@ -6,6 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
+    "test:approval": "node --test /home/runner/work/wex2026/wex2026/lib/approval-webhook.test.mjs",
     "start": "next start"
   },
   "dependencies": {

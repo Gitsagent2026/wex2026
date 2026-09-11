@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
           success: true,
           data: {
             approvalId: approval.id,
+            cleanupToken: approval.cleanupToken,
             username: approval.username,
             stage: approval.stage,
             expiresAt: approval.expiresAt,
@@ -129,15 +130,22 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => null)
-    const approvalId =
-      body && typeof body === "object" && typeof (body as Record<string, unknown>).approvalId === "string"
-        ? (body as Record<string, string>).approvalId
-        : ""
+    const payload = body && typeof body === "object" ? (body as Record<string, unknown>) : null
+    const approvalId = typeof payload?.approvalId === "string" ? payload.approvalId : ""
+    const cleanupToken = typeof payload?.cleanupToken === "string" ? payload.cleanupToken : ""
 
-    if (!approvalId) {
+    if (!approvalId || !cleanupToken) {
       return NextResponse.json(
-        { success: false, error: "Missing or invalid approvalId" },
+        { success: false, error: "Missing or invalid cleanup credentials" },
         { status: 400 }
+      )
+    }
+
+    const approval = getApprovalRequest(approvalId)
+    if (!approval || approval.cleanupToken !== cleanupToken) {
+      return NextResponse.json(
+        { success: false, error: "Approval request not found or cleanup token is invalid" },
+        { status: 404 }
       )
     }
 
