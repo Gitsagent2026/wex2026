@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { SITE_ORIGIN } from "@/lib/site-url"
 
-/**
- * Dynamic XML Sitemap
- * - Only index landing page (/)
- * - Exclude API routes (/api/*)
- * - Exclude internal pages (forgot password, verification, etc)
- */
-
 export async function GET(request: NextRequest) {
   const pages = [
     {

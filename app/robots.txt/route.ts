@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { SITE_ORIGIN } from "@/lib/site-url"
 
-/**
- * Robots.txt configuration
- * - Allow general crawling
- * - Disallow API and internal pages
- * - Point to sitemap for the canonical domain
- */
-
 export async function GET(request: NextRequest) {
-  const robotsTxt = `# Robots.txt - WEX Health Login Portal
-# Single canonical domain: ${SITE_ORIGIN}
-
-User-agent: *
+  const robotsTxt = `User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /_next/
