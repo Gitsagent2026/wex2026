@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { SITE_ORIGIN } from "@/lib/site-url"
 
 /**
  * Dynamic XML Sitemap
@@ -7,15 +8,13 @@ import { NextRequest, NextResponse } from "next/server"
  * - Exclude internal pages (forgot password, verification, etc)
  */
 
-const SITE_ORIGIN = "https://gebreezebenefitsaccount.com"
-
 export async function GET(request: NextRequest) {
   const pages = [
     {
       path: "/",
-      changefreq: "daily",
+      changefreq: "weekly",
       priority: 1.0,
-      lastmod: "2026-09-11T22:42:00.000Z",
+      lastmod: "2026-09-12T00:00:00.000Z",
     },
   ]
 
