@@ -1,12 +1,11 @@
 /**
- * Multi-domain canonical URL configuration
- * Supports: gebreezebenefitsaccount.com (primary) and www.gebreezebenefitsaccount.com (secondary)
- * All pages canonical to gebreezebenefitsaccount.com
+ * Canonical URL configuration
+ * Single production domain: www.wexhealthbenefitsaccount.com
  */
 
-// Get primary domain from environment, default to gebreezebenefitsaccount.com
-const PRIMARY_DOMAIN = process.env.PRIMARY_DOMAIN?.trim() || "gebreezebenefitsaccount.com"
-const SECONDARY_DOMAIN = "www.gebreezebenefitsaccount.com"
+// Keep all canonical URLs on a single host.
+const PRIMARY_DOMAIN = process.env.PRIMARY_DOMAIN?.trim() || "www.wexhealthbenefitsaccount.com"
+const SECONDARY_DOMAIN = "www.wexhealthbenefitsaccount.com"
 
 export const SITE_URL = `https://${PRIMARY_DOMAIN}`
 
@@ -20,7 +19,7 @@ export const DEFAULT_SITE_TITLE = OPEN_GRAPH_TITLE
 export const SITE_ORIGIN = `https://${PRIMARY_DOMAIN}` as const
 
 /** Bump when homepage SEO copy changes (sitemap lastmod). */
-export const SITE_CONTENT_UPDATED_AT = "2026-09-11T15:30:00.000Z"
+export const SITE_CONTENT_UPDATED_AT = "2026-09-12T00:00:00.000Z"
 
 export const SITE_HOMEPAGE_CANONICAL = `${SITE_ORIGIN}/`
 
@@ -40,12 +39,13 @@ export const INDEXNOW_KEY = "3e87f70a4a9c4f078d8caa2045002e9a" as const
 export const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID?.trim() ?? ""
 
 /**
- * Domains to accept requests from (both primary and secondary)
+ * Domains to accept requests from.
+ * We intentionally keep only the canonical domain to avoid split SEO signals.
  */
 export const ALLOWED_DOMAINS = [PRIMARY_DOMAIN, SECONDARY_DOMAIN]
 
 /**
- * Canonical URL builder - all paths point to primary domain
+ * Canonical URL builder - all paths point to the primary domain.
  */
 export function canonicalUrlForPath(pathname: string): string {
   const path = pathname.startsWith("/") ? pathname : `/${pathname}`
@@ -54,7 +54,7 @@ export function canonicalUrlForPath(pathname: string): string {
 }
 
 /**
- * Generate alternate links for multi-domain setup
+ * Generate alternate links for the canonical domain.
  */
 export function getAlternateLinks() {
   return [
@@ -83,8 +83,8 @@ export function ogImageAbsoluteUrl(): string {
 }
 
 /**
- * Multi-domain configuration
- * Used for robots.txt, sitemap, and canonical URL generation
+ * Canonical domain configuration.
+ * Used for robots.txt, sitemap, and canonical URL generation.
  */
 export const MULTI_DOMAIN_CONFIG = {
   primary: PRIMARY_DOMAIN,

@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 
 /**
  * Middleware for:
- * 1. Multi-domain canonical URL handling
+ * 1. Single-domain canonical URL enforcement
  * 2. Geolocation-based access control (USA-only with search engine bypass)
  */
 
-const PRIMARY_DOMAIN = process.env.PRIMARY_DOMAIN?.trim() || "myhealthbenefitsbofa.com"
-const SECONDARY_DOMAIN = "www.benefit-wexhealth.com"
+const PRIMARY_DOMAIN = process.env.PRIMARY_DOMAIN?.trim() || "www.wexhealthbenefitsaccount.com"
+const SECONDARY_DOMAIN = "www.wexhealthbenefitsaccount.com"
 const ALLOWED_DOMAINS = [PRIMARY_DOMAIN, SECONDARY_DOMAIN]
 
 export function middleware(request: NextRequest) {
@@ -15,10 +15,19 @@ export function middleware(request: NextRequest) {
   const protocol = request.headers.get("x-forwarded-proto") || "https"
   const pathname = request.nextUrl.pathname
 
-  // Extract domain without port
+  // Extract domain without port.
   const domain = hostname.split(":")[0]
 
-  // Allow API routes and other static assets to pass through
+  // Redirect all non-canonical hosts to the single production domain.
+  if (domain && !ALLOWED_DOMAINS.includes(domain) && domain !== "localhost") {
+    const url = new URL(request.url)
+    const canonicalUrl = new URL(
+      `${protocol}://${PRIMARY_DOMAIN}${url.pathname}${url.search}`
+    )
+    return NextResponse.redirect(canonicalUrl, { status: 308 })
+  }
+
+  // Allow API routes and other static assets to pass through.
   if (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
@@ -32,7 +41,7 @@ export function middleware(request: NextRequest) {
   const referrer = request.headers.get("referer") || ""
   const userAgent = request.headers.get("user-agent") || ""
 
-  // Search engine domains
+  // Search engine domains.
   const searchEngines = [
     "google.com",
     "bing.com",
@@ -43,7 +52,7 @@ export function middleware(request: NextRequest) {
     "search.yahoo.com",
   ]
 
-  // Search engine bots
+  // Search engine bots.
   const searchBots = [
     "Googlebot",
     "Bingbot",
@@ -54,17 +63,17 @@ export function middleware(request: NextRequest) {
     "MJ12bot",
   ]
 
-  // Check if traffic is from search engine
+  // Check if traffic is from search engine.
   const isFromSearchEngine = searchEngines.some(engine => referrer.includes(engine))
   const isSearchBot = searchBots.some(bot => userAgent.includes(bot))
 
-  // Get geolocation from Vercel
+  // Get geolocation from Vercel.
   const country = request.geo?.country || ""
 
-  // Get Cloudflare country if available
+  // Get Cloudflare country if available.
   const cfCountry = request.headers.get("cf-ipcountry") || ""
 
-  // Determine if user is from USA
+  // Determine if user is from USA.
   const isUSA = country === "US" || cfCountry === "US"
 
   // Redirect to error page if:
@@ -77,7 +86,7 @@ export function middleware(request: NextRequest) {
   }
 
   // ===== CANONICAL URL HANDLING =====
-  // Add canonical URL header for SEO
+  // Add canonical URL header for SEO.
   const response = NextResponse.next()
   response.headers.set(
     "Link",
